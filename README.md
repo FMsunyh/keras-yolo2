@@ -1,4 +1,4 @@
-# keras-yolo
+# keras-yolo (yolo v1)
 ## Introduction to object detection
 。。。                                          |
 
