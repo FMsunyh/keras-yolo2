@@ -27,7 +27,7 @@ import os
 import keras
 import keras.preprocessing.image
 
-from core.models.model import create_yolo
+from core.models.model import create_yolo2
 from core.preprocessing import PascalVocGenerator
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
@@ -35,10 +35,12 @@ os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 
 def create_model():
-    image = keras.layers.Input((448, 448, 3))
+    image = keras.layers.Input((416, 416, 3))
     # image = keras.layers.Input((None, None, 3))
-    gt_boxes = keras.layers.Input((7, 7, 25))
-    return create_yolo([image, gt_boxes], num_classes=20, weights=None)
+    # gt_boxes = keras.layers.Input((7, 7, 25))
+    gt_boxes = keras.layers.Input((1, 1, 1, 100, 4))
+    targets = keras.layers.Input((13, 13, 5, 25))
+    return create_yolo2([image, gt_boxes,  targets], num_classes=20, weights=None)
 
 def parse_args():
     """Parse input arguments."""
@@ -49,7 +51,7 @@ def parse_args():
 
     pascal_parser = subparsers.add_parser('pascal')
     pascal_parser.add_argument('pascal_path', help='Path to dataset directory (ie. /tmp/VOCdevkit).', default='/home/syh/train_data/VOCdevkit/VOC2007')
-    parser.add_argument('--root_path', help='Size of the batches.', default= os.path.join(os.path.expanduser('~'), 'keras_yolo'), type=str)
+    parser.add_argument('--root_path', help='Size of the batches.', default= os.path.join(os.path.expanduser('~'), 'keras_yolo2'), type=str)
 
     parser.add_argument('--batch-size', help='Size of the batches.', default=4, type=int)
 
@@ -110,16 +112,16 @@ if __name__ == '__main__':
         validation_data=test_generator,
         validation_steps=len(test_generator.image_names) // args.batch_size,
         callbacks=[
-            keras.callbacks.ModelCheckpoint(os.path.join(args.root_path, 'snapshots/yolo(v1)_voc_best.h5'), monitor='val_loss', verbose=1, mode='min', save_best_only=True),
+            keras.callbacks.ModelCheckpoint(os.path.join(args.root_path, 'snapshots/yolo(v2)_voc_best.h5'), monitor='val_loss', verbose=1, mode='min', save_best_only=True),
             keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=10, verbose=1, mode='auto', min_delta=0.0001, cooldown=0, min_lr=0),
         ],
     )
 
     # store final result too
-    model.save('snapshots/yolo(v1)_voc_best.h5')
+    model.save('snapshots/yolo(v2)_voc_best.h5')
 
 
     '''
     cd tools
-    python train_yolo.py pascal /home/syh/train_data/VOCdevkit/VOC2007
+    python train_yolo2.py pascal /home/syh/train_data/VOCdevkit/VOC2007
     '''

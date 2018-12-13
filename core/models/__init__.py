@@ -1,1 +1,1 @@
-from .yolo import Yolo
+from .yolo2 import Yolo2

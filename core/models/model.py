@@ -24,17 +24,17 @@ limitations under the License.
 
 import keras
 import core
-from core.models import Yolo
+from core.models import Yolo2
 
 
-def create_yolo(inputs, training=True, num_classes=21, weights=None, *args, **kwargs):
+def create_yolo2(inputs, training=True, num_classes=20, weights=None, *args, **kwargs):
     if training:
-        image, gt_boxes = inputs
+        image, gt_boxes, targets = inputs
     else:
         image = inputs
 
-    coord_loss, object_loss, noobject_loss, cls_loss, output = Yolo(training=training, num_classes=num_classes, weights=weights)([image, gt_boxes])
+    loss, output = Yolo2(training=training, num_classes=num_classes, weights=weights)([image, gt_boxes, targets])
 
-    model = keras.models.Model(inputs=inputs, outputs=[coord_loss, object_loss, noobject_loss, cls_loss,output])
+    model = keras.models.Model(inputs=inputs, outputs=[loss,output])
     return model
 

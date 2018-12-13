@@ -27,6 +27,9 @@ import threading
 import warnings
 
 import keras
+
+from core.legacy.utils import bbox_iou
+from core.preprocessing.utils import BoundBox
 from ..utils.image import (
     resize_image,
     preprocess_image)
@@ -39,9 +42,11 @@ class Generator(object):
         batch_size=2,
         group_method='random',  # one of 'none', 'random', 'ratio'
         shuffle_groups=True,
-        image_min_side=448,
-        image_max_side=448,
-        cell_size=7,
+        image_min_side=416,
+        image_max_side=416,
+        cell_size=13,
+        anchors=list([0.57273, 0.677385, 1.87446, 2.06253, 3.33843, 5.47434, 7.88282, 3.52778, 9.77052, 9.16828]),
+        gt_box_max_buffer = 100,
         transform_parameters=None,
     ):
         self.transform_generator    = transform_generator
@@ -53,6 +58,12 @@ class Generator(object):
         self.cell_size              = cell_size
         self.transform_parameters   = transform_parameters
 
+
+        self.anchors                = anchors
+        self.num_boxes              = len(self.anchors)//2
+        self.anchor_boxes = [BoundBox(0, 0, self.anchors[2*i], self.anchors[2*i+1]) for i in range(len(self.anchors)//2)]
+
+        self.gt_box_max_buffer = gt_box_max_buffer
         self.group_index = 0
         self.lock = threading.Lock()
 
@@ -170,7 +181,7 @@ class Generator(object):
         # construct an image batch object
         image_batch = np.zeros((self.batch_size,) + max_shape, dtype=keras.backend.floatx())
 
-        # copy all images to the upper left part of the image batch object
+        # c opy all images to the upper left part of the image batch object
         for image_index, image in enumerate(image_group):
             image_batch[image_index, :image.shape[0], :image.shape[1], :image.shape[2]] = image
 
@@ -180,9 +191,10 @@ class Generator(object):
         # same size for all batch image
         h, w, _ = image_group[0].shape
 
-        targets =  np.zeros((len(annotations_group), self.cell_size, self.cell_size, 25))
+        gt_batch = np.zeros((self.batch_size, 1, 1, 1, self.gt_box_max_buffer, 4))
+        targets =  np.zeros((self.batch_size, self.cell_size, self.cell_size, self.num_boxes, 4+1+self.num_classes()))
         for annotation_index, annotation in enumerate(annotations_group):
-            label = np.zeros((self.cell_size, self.cell_size, 25))
+            label = np.zeros((self.cell_size, self.cell_size,self.num_boxes, 4+1+self.num_classes()))
             
             box_chw =np.stack([
                 (annotation[:,0] + annotation[:,2])/2,
@@ -190,22 +202,49 @@ class Generator(object):
                 (annotation[:,2] - annotation[:,0]),
                 (annotation[:,3] - annotation[:,1])], axis=1)
             # cls_ind = [self.label_to_name(label) for label in annotation[:, 4]]
+
+            box_chw[:,0] = (box_chw[:,0] / w) * self.cell_size
+            box_chw[:,1] = box_chw[:,1] / h * self.cell_size
+            box_chw[:, 2] = box_chw[:, 2] / w * self.cell_size
+            box_chw[:, 3] = box_chw[:, 3] / h * self.cell_size
+
             cls_ind = np.int32(annotation[:, 4])
 
-            # x_ind， y_ind
-            x_ind = np.int32(box_chw[:, 0] * self.cell_size / w)
-            y_ind = np.int32(box_chw[:, 1] * self.cell_size / h)
+            for index, (class_index, box) in enumerate(zip(cls_ind, box_chw)):
+                best_anchor = -1
+                max_iou = -1
 
-            #Each grid cell predicts only one object
-            index =  np.where(label[y_ind, x_ind,0]!=1)
-            if len(index):
-                label[y_ind[index], x_ind[index], 0] = 1
-                label[y_ind[index], x_ind[index], 1:5] = box_chw[index,...]
-                label[y_ind[index], x_ind[index], 5+cls_ind[index]] = 1
+                shifted_box = BoundBox(0,
+                                       0,
+                                       box[2],
+                                       box[3])
+                for i in range(self.num_boxes):
+                    anchor_box = self.anchor_boxes[i]
+                    iou = bbox_iou(shifted_box, anchor_box)
 
+                    if max_iou < iou:
+                        best_anchor = i
+                        max_iou = iou
+
+
+                # x_ind， y_ind
+                x_ind = np.int32(box[0])
+                y_ind = np.int32(box[1])
+
+                #Each grid cell predicts five object
+                if label[y_ind, x_ind, best_anchor, 4] == 1:
+                    # alreadly existed anchor, skill it
+                    continue
+
+                label[y_ind, x_ind, best_anchor, 0:4]        = box
+                label[y_ind, x_ind, best_anchor, 4]          = 1
+                label[y_ind, x_ind, best_anchor, 5+class_index]  = 1
+
+                # index must less than self.gt_box_max_buffer
+                gt_batch[annotation_index, 0, 0, 0, index] = box
             targets[annotation_index] = label
 
-        return np.asarray(targets)
+        return np.asarray(gt_batch), np.asarray(targets)
 
     def compute_input_output(self, group):
         # load images and annotations
@@ -222,9 +261,9 @@ class Generator(object):
         inputs = self.compute_inputs(image_group)
 
         # compute network targets
-        targets = self.compute_targets(image_group, annotations_group)
+        gt_boxes, targets = self.compute_targets(image_group, annotations_group)
 
-        return [inputs, targets], None
+        return [inputs, gt_boxes, targets], None
 
     def __next__(self):
         return self.next()
