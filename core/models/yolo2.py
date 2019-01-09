@@ -34,7 +34,7 @@ from core.models.utils import compose
 
 
 class Yolo2(object):
-    def __init__(self, training=True, num_classes=20, weights=None):
+    def __init__(self, training=True, num_classes=20):
         '''
         Darknet19 introduced in YOLO V2.
 

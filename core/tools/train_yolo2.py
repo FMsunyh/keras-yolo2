@@ -60,7 +60,7 @@ def create_model(num_classes=20):
     gt_boxes = keras.layers.Input((1, 1, 1, 100, 4))
     targets = keras.layers.Input((13, 13, 5, 25))
     train_model = create_yolo2([image, gt_boxes,  targets], num_classes=num_classes, weights=None)
-    eval_model = create_yolo2(image, training=False, num_classes=num_classes, weights=None)
+    eval_model = create_yolo2(keras.layers.Input((None, None, 3)), training=False, num_classes=num_classes, weights=None)
 
     return train_model, eval_model
 
@@ -106,6 +106,8 @@ def create_callbacks(model, evaluation_model, validation_generator, args):
                               tensorboard=tensorboard_callback)
         evaluation = RedirectModel(evaluation, evaluation_model)
         callbacks.append(evaluation)
+
+    return callbacks
 
 def create_generators(args):
     # create image data generator objects

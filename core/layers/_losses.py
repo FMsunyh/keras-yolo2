@@ -25,29 +25,6 @@ import keras
 import tensorflow as tf
 import numpy as np
 
-# class Loss(keras.layers.Layer):
-#     def __init__(self, num_classes=20,*args, **kwargs):
-#         self.num_classes = num_classes
-#
-#         super(Loss, self).__init__(*args, **kwargs)
-#
-#     def call(self, inputs, **kwargs):
-#         y_true, y_pred = inputs
-#         loss = tf.sqrt(tf.reduce_sum(y_pred))
-#         self.add_loss(loss)
-#         return [loss]
-#
-#     def compute_output_shape(self, input_shape):
-#         return [(1,)]
-#
-#     def compute_mask(self, inputs, mask=None):
-#         return [None]
-#
-#     def get_config(self):
-#         return {
-#             'num_classes' : self.num_classes
-#         }
-
 class Loss(keras.layers.Layer):
     def __init__(self, num_classes=20, cell_size=13, boxes_per_cell=2, *args, **kwargs):
         self.num_classes = num_classes
