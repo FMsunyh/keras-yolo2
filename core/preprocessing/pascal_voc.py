@@ -115,7 +115,7 @@ class PascalVocGenerator(Generator):
 
 
 
-        super(PascalVocGenerator, self).__init__(**kwargs)
+        super(PascalVocGenerator, self).__init__(batch_size=args.batch_size, **kwargs)
 
     def _load_image_names(self):
         image_names = []
