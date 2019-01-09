@@ -127,6 +127,7 @@ def create_generators(args):
     train_generator = PascalVocGenerator(
         args,
         'trainval',
+        batch_size=args.batch_size,
         transform_generator=train_image_data_generator
     )
 

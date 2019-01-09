@@ -23,6 +23,7 @@ import os
 
 import cv2
 
+from core.preprocessing.utils import bbox_iou, BoundBox
 from core.utils.compute_overlap import compute_overlap
 from core.utils.visualization import draw_annotations, draw_detections
 
@@ -61,10 +62,88 @@ def _compute_input(generator, index):
 
     return raw_image, image, scale, raw_image.shape[0:2]
 
-def compute_output(output):
-    scores, pred_shifts, proposal_boxes = output[0][0], output[1][0], output[2][0]
 
-    class_name, boxes, cls_socre = None,None,None
+def _sigmoid(x):
+    return 1. / (1. + np.exp(-x))
+
+
+def _softmax(x, axis=-1, t=-100.):
+    x = x - np.max(x)
+
+    if np.min(x) < t:
+        x = x / np.min(x) * t
+
+    e_x = np.exp(x)
+
+    return e_x / e_x.sum(axis, keepdims=True)
+
+def decode_netout(netout, anchors, nb_class=20, obj_threshold=0.3, nms_threshold=0.3):
+    grid_h, grid_w, nb_box = netout.shape[:3]
+
+    boxes = []
+
+    # decode the output by the network
+    netout[..., 4] = _sigmoid(netout[..., 4])
+    netout[..., 5:] = netout[..., 4][..., np.newaxis] * _softmax(netout[..., 5:])
+    netout[..., 5:] *= netout[..., 5:] > obj_threshold
+
+    for row in range(grid_h):
+        for col in range(grid_w):
+            for b in range(nb_box):
+                # from 4th element onwards are confidence and class classes
+                classes = netout[row, col, b, 5:]
+
+                if np.sum(classes) > 0:
+                    # first 4 elements are x, y, w, and h
+                    x, y, w, h = netout[row, col, b, :4]
+
+                    x = (col + _sigmoid(x)) / grid_w  # center position, unit: image width
+                    y = (row + _sigmoid(y)) / grid_h  # center position, unit: image height
+                    w = anchors[2 * b + 0] * np.exp(w) / grid_w  # unit: image width
+                    h = anchors[2 * b + 1] * np.exp(h) / grid_h  # unit: image height
+                    confidence = netout[row, col, b, 4]
+
+                    box = BoundBox(x - w / 2, y - h / 2, x + w / 2, y + h / 2, confidence, classes)
+
+                    boxes.append(box)
+
+    # suppress non-maximal boxes
+    for c in range(nb_class):
+        sorted_indices = list(reversed(np.argsort([box.classes[c] for box in boxes])))
+
+        for i in range(len(sorted_indices)):
+            index_i = sorted_indices[i]
+
+            if boxes[index_i].classes[c] == 0:
+                continue
+            else:
+                for j in range(i + 1, len(sorted_indices)):
+                    index_j = sorted_indices[j]
+
+                    if bbox_iou(boxes[index_i], boxes[index_j]) >= nms_threshold:
+                        boxes[index_j].classes[c] = 0
+
+    # remove the boxes which are less likely than a obj_threshold
+    boxes = [box for box in boxes if box.get_score() > obj_threshold]
+
+    return boxes
+
+def compute_output(output):
+    anchors = list([0.57273, 0.677385, 1.87446, 2.06253, 3.33843, 5.47434, 7.88282, 3.52778, 9.77052, 9.16828])
+    bboxes = decode_netout(output[0], anchors)
+
+    class_name = [box.get_label() for box in bboxes]
+    cls_socre = [box.get_score() for box in bboxes]
+    boxes = [box.get_box() for box in bboxes]
+
+    class_name = np.array(class_name)
+    boxes = np.array(boxes)
+    cls_socre = np.array(cls_socre)
+
+    class_name = np.expand_dims(class_name, axis=0)
+    boxes = np.expand_dims(boxes, axis=0)
+    cls_socre = np.expand_dims(cls_socre, axis=0)
+
     return [class_name, boxes, cls_socre]
 
 def _get_detections(generator, model, score_threshold=0.05, max_detections=100, save_path=None):
@@ -93,29 +172,33 @@ def _get_detections(generator, model, score_threshold=0.05, max_detections=100, 
 
         labels, boxes, scores = compute_output(output)
 
-        # all model
-        # output = model.predict(np.expand_dims(image, axis=0))
-        # labels, boxes, scores = compute_output(output)
+        # select indices which have a score above the threshold
+        indices = np.where(scores[0, :] > score_threshold)[0]
 
-        # if len(labels)==0:
-        #     continue
+        # select those scores
+        scores = scores[0][indices]
 
-        # clip boxes when out of image bound
-        # boxes = clip_boxes(boxes, im_shape)
+        if len(labels[0])==0:
+            boxes = np.zeros((1,1,4))
+        boxes[0, :, 0] *= im_shape[1] # w
+        boxes[0, :, 1] *= im_shape[0]
+        boxes[0, :, 2] *= im_shape[1]
+        boxes[0, :, 3] *= im_shape[0]
 
-        # print(boxes)
-        # correct boxes for image scale
-        boxes /= scale
+        # find the order with which to sort the scores
+        scores_sort = np.argsort(-scores)[:max_detections]
 
-        image_boxes      = boxes
-        image_scores     = np.array(scores)
-        image_labels     = labels
+        # select detections
+        image_boxes = boxes[0, indices[scores_sort], :]
+        image_scores = scores[scores_sort]
+        image_labels = labels[0, indices[scores_sort]]
+
         image_detections = np.concatenate([image_boxes, np.expand_dims(image_scores, axis=1), np.expand_dims(image_labels, axis=1)], axis=1)
 
 
         if save_path is not None:
             draw_annotations(raw_image, generator.load_annotations(i), label_to_name=generator.label_to_name)
-            draw_detections(raw_image, image_boxes, image_scores, image_labels, label_to_name=generator.label_to_name)
+            draw_detections(raw_image, image_boxes, image_scores, image_labels, label_to_name=generator.label_to_name, score_threshold=0.2)
 
             cv2.imwrite(os.path.join(save_path, '{}.png'.format(i)), raw_image)
 
