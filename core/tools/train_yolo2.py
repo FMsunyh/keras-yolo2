@@ -102,7 +102,7 @@ def create_callbacks(model, evaluation_model, validation_generator, args):
 
     # evaluation
     if args.evaluation and validation_generator:
-        evaluation = Evaluate(weight_path, evaluation_model, validation_generator, save_path=args.save_path,
+        evaluation = Evaluate(weight_path, validation_generator, save_path=args.save_path,
                               tensorboard=tensorboard_callback)
         evaluation = RedirectModel(evaluation, evaluation_model)
         callbacks.append(evaluation)
@@ -135,6 +135,7 @@ def create_generators(args):
     valid_generator = PascalVocGenerator(
         args,
         'test',
+        batch_size=1,
         transform_generator=valid_image_data_generator
     )
 
@@ -188,6 +189,8 @@ def main():
     print('Creating model, this may take a second...')
     model, eval_model = create_model()
 
+    model.load_weights(filepath=args.weight_path, by_name=True)
+
     # compile model (note: set loss to None since loss is added inside layer)
     model.compile(loss=None, optimizer=keras.optimizers.adam(lr=1e-5, clipnorm=0.001))
     eval_model.compile(loss=None, optimizer=keras.optimizers.adam(lr=1e-5, clipnorm=0.001))
@@ -203,10 +206,9 @@ def main():
     model.fit_generator(
         generator=train_generator,
         steps_per_epoch=len(train_generator.image_names) // args.batch_size,
+        # steps_per_epoch=10,
         epochs=100,
         verbose=1,
-        validation_data=valid_generator,
-        validation_steps=len(valid_generator.image_names) // args.batch_size,
         callbacks=callbacks,
     )
 
