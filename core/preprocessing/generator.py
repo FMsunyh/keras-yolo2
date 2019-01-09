@@ -30,7 +30,7 @@ import keras
 
 from core.legacy.utils import bbox_iou
 from core.preprocessing.utils import BoundBox
-from ..utils.image import (
+from core.utils.image import (
     resize_image,
     preprocess_image)
 
@@ -39,7 +39,7 @@ class Generator(object):
     def __init__(
         self,
         transform_generator = None,
-        batch_size=2,
+        batch_size=1,
         group_method='random',  # one of 'none', 'random', 'ratio'
         shuffle_groups=True,
         image_min_side=416,
@@ -191,8 +191,10 @@ class Generator(object):
         # same size for all batch image
         h, w, _ = image_group[0].shape
 
-        gt_batch = np.zeros((self.batch_size, 1, 1, 1, self.gt_box_max_buffer, 4))
+        # gt_batch = np.zeros((self.batch_size, 1, 1, 1, self.gt_box_max_buffer, 4))
+        gt_batch = np.zeros((self.batch_size, 1, 1, self.gt_box_max_buffer, 4+1+self.num_classes()))
         targets =  np.zeros((self.batch_size, self.cell_size, self.cell_size, self.num_boxes, 4+1+self.num_classes()))
+        targets_gt_boxes =  np.zeros((self.batch_size, self.cell_size+1, self.cell_size+1, self.num_boxes+self.gt_box_max_buffer, 4+1+self.num_classes()))
         for annotation_index, annotation in enumerate(annotations_group):
             label = np.zeros((self.cell_size, self.cell_size,self.num_boxes, 4+1+self.num_classes()))
             
@@ -241,10 +243,14 @@ class Generator(object):
                 label[y_ind, x_ind, best_anchor, 5+class_index]  = 1
 
                 # index must less than self.gt_box_max_buffer
-                gt_batch[annotation_index, 0, 0, 0, index] = box
+                gt_batch[annotation_index, 0, 0, index, :4] = box
             targets[annotation_index] = label
 
-        return np.asarray(gt_batch), np.asarray(targets)
+        targets_gt_boxes[:, :self.cell_size, :self.cell_size, :self.num_boxes, :] = targets
+        targets_gt_boxes[:, self.cell_size:, self.cell_size:, self.num_boxes:, :] = gt_batch
+
+        # return np.asarray(gt_batch), np.asarray(targets)
+        return np.asarray(targets_gt_boxes)
 
     def compute_input_output(self, group):
         # load images and annotations
@@ -261,9 +267,9 @@ class Generator(object):
         inputs = self.compute_inputs(image_group)
 
         # compute network targets
-        gt_boxes, targets = self.compute_targets(image_group, annotations_group)
+        targets = self.compute_targets(image_group, annotations_group)
 
-        return [inputs, gt_boxes, targets], None
+        return inputs, targets
 
     def __next__(self):
         return self.next()

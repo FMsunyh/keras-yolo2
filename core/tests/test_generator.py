@@ -16,6 +16,30 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 # -----------------------------------------------------
+# @Time    : 1/9/2019 3:21 PM
+# @Author  : Firmin.Sun (fmsunyh@gmail.com)
+# @Software: ZJ_AI
+# -----------------------------------------------------
+# -*- coding: utf-8 -*-
+
+#!/usr/bin/python3
+
+"""
+Copyright 2018-2019  Firmin.Sun (fmsunyh@gmail.com)
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
+# -----------------------------------------------------
 # @Time    : 11/9/2018 3:54 PM
 # @Author  : Firmin.Sun (fmsunyh@gmail.com)
 # @Software: ZJ_AI
@@ -23,97 +47,10 @@ limitations under the License.
 # -*- coding: utf-8 -*-
 import argparse
 import os
-
 import keras
 import keras.preprocessing.image
-import tensorflow as tf
-from keras.callbacks import TensorBoard
-
-from core.callbacks import RedirectModel
-from core.callbacks.eval import Evaluate
-from core.models.model import create_yolo2
-from core.models._losses import losses
 from core.preprocessing import PascalVocGenerator
 from core.utils.config import load_setting_cfg
-
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-
-def get_session():
-    cfg = tf.ConfigProto()
-    cfg.gpu_options.allocator_type = 'BFC'
-    # cfg.gpu_options.per_process_gpu_memory_fraction = 0.90
-    cfg.gpu_options.allow_growth = True
-    return tf.Session(config=cfg)
-
-def set_gpu(args):
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
-
-    sess = get_session()
-    import keras.backend.tensorflow_backend as ktf
-    ktf.set_session(sess)
-
-
-def create_model(num_classes=20):
-    image = keras.layers.Input((416, 416, 3))
-    # image = keras.layers.Input((None, None, 3))
-    # gt_boxes = keras.layers.Input((7, 7, 25))
-    # gt_boxes = keras.layers.Input((1, 1, 100, 4))
-    # targets = keras.layers.Input((13, 13, 5, 25))
-    train_model = create_yolo2(image, num_classes=num_classes, weights=None)
-
-    # eval_model = create_yolo2(keras.layers.Input((None, None, 3)), training=False, num_classes=num_classes, weights=None)
-    eval_model = None
-    return train_model, eval_model
-
-def create_callbacks(model, evaluation_model, validation_generator, args):
-    callbacks = []
-    # save the model
-    if args.snapshots:
-        # ensure directory created first; otherwise h5py will error after epoch.
-        snapshot_dir = os.path.join(args.root_path, args.snapshot_path, args.tag)
-        if not os.path.exists(snapshot_dir):
-            os.makedirs(snapshot_dir, exist_ok=True)
-
-        checkpoint_model = keras.callbacks.ModelCheckpoint(
-            os.path.join(args.root_path, 'snapshots', args.tag, args.tag + '_{epoch:02d}.h5'),
-            verbose=1,
-            save_weights_only=True,
-        )
-
-        callbacks.append(checkpoint_model)
-
-        weight_path = os.path.join(args.root_path, 'snapshots', args.tag, args.tag + '_weight_evaluation.h5')
-        checkpoint_evaluation = keras.callbacks.ModelCheckpoint(
-            weight_path,
-            verbose=1,
-            save_weights_only=True,
-        )
-        callbacks.append(checkpoint_evaluation)
-
-    tensorboard_callback = None
-    if args.tensorboard_dir:
-        tensorboard_dir = os.path.abspath(os.path.join(args.root_path, args.tensorboard_dir,args.tag))
-        tensorboard_callback = keras.callbacks.TensorBoard(
-            log_dir                = tensorboard_dir,
-            histogram_freq         = 0,
-            batch_size             = args.batch_size,
-            write_graph            = True,
-            write_grads            = False,
-            write_images           = False,
-            embeddings_freq        = 0,
-            embeddings_layer_names = None,
-            embeddings_metadata    = None
-        )
-        callbacks.append(tensorboard_callback)
-
-    # evaluation
-    if args.evaluation and validation_generator:
-        evaluation = Evaluate(weight_path, evaluation_model, validation_generator, save_path=args.save_path, tensorboard=tensorboard_callback)
-        evaluation = RedirectModel(evaluation, evaluation_model)
-        callbacks.append(evaluation)
-
-    return callbacks
 
 def create_generators(args):
     # create image data generator objects
@@ -186,34 +123,12 @@ def check_args(parsed_args):
 def main():
     # parse arguments
     args = parse_args()
-    set_gpu(args)
-
-    # create the model
-    print('Creating model, this may take a second...')
-    model, eval_model = create_model()
-
-    # compile model (note: set loss to None since loss is added inside layer)
-    model.compile(loss=losses(), optimizer=keras.optimizers.adam(lr=1e-4, clipnorm=0.001))
-    # eval_model.compile(loss=None, optimizer=keras.optimizers.adam(lr=1e-5, clipnorm=0.001))
-
-    # print model summary
-    print(model.summary(line_length=180))
 
     train_generator, valid_generator = create_generators(args)
+
+    a = train_generator.next()
+    print(a)
     # start training
-
-    callbacks = create_callbacks(model, eval_model, valid_generator, args)
-
-    model.fit_generator(
-        generator=train_generator,
-        # steps_per_epoch=len(train_generator.image_names) // args.batch_size,
-        steps_per_epoch=10,
-        epochs=100,
-        verbose=1,
-        validation_data=valid_generator,
-        validation_steps=len(valid_generator.image_names) // args.batch_size,
-        callbacks=callbacks,
-    )
 
 if __name__ == '__main__':
     main()

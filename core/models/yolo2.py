@@ -34,14 +34,13 @@ from core.models.utils import compose
 
 
 class Yolo2(object):
-    def __init__(self, training=True, num_classes=20, weights=None):
+    def __init__(self, num_classes=20):
         '''
         Darknet19 introduced in YOLO V2.
 
         '''
         super(Yolo2, self).__init__()
 
-        self.training = training
         self.num_classes = num_classes
 
         self.network()
@@ -67,7 +66,11 @@ class Yolo2(object):
 
     def network(self):
         # Convolution block 0
+        # self.out_0 = Conv2D(32, kernel_size=(3,3), strides=(1,1), name='conv_0', padding='same',kernel_regularizer=l2(5e-4), use_bias=False)
+        # self.bn_0 = BatchNormalization(name='bn_0')
+        # self.relu_0 = LeakyReLU(alpha=0.1)
         self.out_0      = self._Conv2D_BN_Leaky(32, kernel_size=(3,3), strides=(1,1), name='conv_0')
+
         self.pooling_0  = MaxPooling2D(pool_size=(2,2), strides=2, name='pooling_0')
 
         # Convolution block 1
@@ -108,16 +111,13 @@ class Yolo2(object):
         self.output = Conv2D(5 * (4 + 1 + self.num_classes), kernel_size=(1, 1), strides=(1, 1), padding='same', name='DetectionLayer',  kernel_initializer='lecun_normal')
         self.reshape = Reshape((13, 13, 5, 4 + 1 + self.num_classes))
 
-        if self.training:
-            self.loss = core.layers.Loss(num_classes=self.num_classes)
-
     def __call__(self, inputs, mask=None):
-        if self.training:
-            image, gt_boxes, targets = inputs
-        else:
-            image = inputs
+
+        image = inputs
 
         x = self.out_0(image)
+        # x = self.bn_0(x)
+        # x = self.relu_0(x)
         x = self.pooling_0(x)
 
         x = self.out_1(x)
@@ -150,8 +150,4 @@ class Yolo2(object):
         x = self.output(x)
         x = self.reshape(x)
 
-        if self.training:
-            loss = self.loss([x, gt_boxes, targets])
-            return loss, x
-        else:
-            return x
+        return x
