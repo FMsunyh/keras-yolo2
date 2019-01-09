@@ -26,53 +26,88 @@ import os
 
 import keras
 import keras.preprocessing.image
+import tensorflow as tf
+from keras.callbacks import TensorBoard
 
+from core.callbacks import RedirectModel
+from core.callbacks.eval import Evaluate
 from core.models.model import create_yolo2
 from core.preprocessing import PascalVocGenerator
+from core.utils.config import load_setting_cfg
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 
-def create_model():
+def get_session():
+    cfg = tf.ConfigProto()
+    cfg.gpu_options.allocator_type = 'BFC'
+    # cfg.gpu_options.per_process_gpu_memory_fraction = 0.90
+    cfg.gpu_options.allow_growth = True
+    return tf.Session(config=cfg)
+
+def set_gpu(args):
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
+
+    sess = get_session()
+    import keras.backend.tensorflow_backend as ktf
+    ktf.set_session(sess)
+
+
+def create_model(num_classes=20):
     image = keras.layers.Input((416, 416, 3))
     # image = keras.layers.Input((None, None, 3))
     # gt_boxes = keras.layers.Input((7, 7, 25))
     gt_boxes = keras.layers.Input((1, 1, 1, 100, 4))
     targets = keras.layers.Input((13, 13, 5, 25))
-    return create_yolo2([image, gt_boxes,  targets], num_classes=20, weights=None)
+    train_model = create_yolo2([image, gt_boxes,  targets], num_classes=num_classes, weights=None)
+    eval_model = create_yolo2(image, training=False, num_classes=num_classes, weights=None)
 
-def parse_args():
-    """Parse input arguments."""
-    parser = argparse.ArgumentParser(description='Tensorflow Faster R-CNN demo')
+    return train_model, eval_model
 
-    subparsers = parser.add_subparsers(help='Arguments for specific dataset types.', dest='dataset_type')
-    subparsers.required = True
+def create_callbacks(model, evaluation_model, validation_generator, args):
+    callbacks = []
+    # save the model
+    if args.snapshots:
+        # ensure directory created first; otherwise h5py will error after epoch.
+        os.makedirs(args.snapshot_path, exist_ok=True)
 
-    pascal_parser = subparsers.add_parser('pascal')
-    pascal_parser.add_argument('pascal_path', help='Path to dataset directory (ie. /tmp/VOCdevkit).', default='/home/syh/train_data/VOCdevkit/VOC2007')
-    parser.add_argument('--root_path', help='Size of the batches.', default= os.path.join(os.path.expanduser('~'), 'keras_yolo2'), type=str)
+        checkpoint_model = keras.callbacks.ModelCheckpoint(
+            os.path.join(args.root_path, 'snapshots', args.tag, args.tag + '_{epoch:02d}.h5'),
+            verbose=1,
+            save_weights_only=True,
+        )
 
-    parser.add_argument('--batch-size', help='Size of the batches.', default=4, type=int)
+        callbacks.append(checkpoint_model)
 
-    args = parser.parse_args()
+        weight_path = os.path.join(args.root_path, 'snapshots', args.tag, args.tag + '_weight_evaluation.h5')
+        checkpoint_evaluation = keras.callbacks.ModelCheckpoint(
+            weight_path,
+            verbose=1,
+            save_weights_only=True,
+        )
+        callbacks.append(checkpoint_evaluation)
 
-    return args
 
-if __name__ == '__main__':
-    # parse arguments
-    args = parse_args()
+    if args.tensorboard_dir:
+        tensorboard_dir = os.path.abspath(os.path.join(args.root_path, args.tensorboard_dir,args.tag))
+        tensorboard_callback = TensorBoard(
+            log_dir                = tensorboard_dir,
+            batch_size             = args.batch_size,
+            write_graph            = True,
+            write_grads            = False,
+            write_images           = False
+        )
 
-    # create the model
-    print('Creating model, this may take a second...')
-    model = create_model()
+        callbacks.append(tensorboard_callback)
 
-    # compile model (note: set loss to None since loss is added inside layer)
-    model.compile(loss=None, optimizer=keras.optimizers.adam(lr=1e-5, clipnorm=0.001))
+    # evaluation
+    if args.evaluation and validation_generator:
+        evaluation = Evaluate(weight_path, evaluation_model, validation_generator, save_path=args.save_path,
+                              tensorboard=tensorboard_callback)
+        evaluation = RedirectModel(evaluation, evaluation_model)
+        callbacks.append(evaluation)
 
-    # print model summary
-    print(model.summary(line_length=180))
-
+def create_generators(args):
     # create image data generator objects
     train_image_data_generator = keras.preprocessing.image.ImageDataGenerator(
         rescale=1.0 / 255.0,
@@ -82,44 +117,98 @@ if __name__ == '__main__':
         height_shift_range=0.1,
         zoom_range=0.1,
     )
-    test_image_data_generator = keras.preprocessing.image.ImageDataGenerator(
+    valid_image_data_generator = keras.preprocessing.image.ImageDataGenerator(
         rescale=1.0 / 255.0,
     )
 
     # create a generator for training data
     train_generator = PascalVocGenerator(
-        args.pascal_path,
+        args,
         'trainval',
-        batch_size=args.batch_size,
-        transform_generator = train_image_data_generator
+        transform_generator=train_image_data_generator
     )
 
-    # create a generator for testing data
-    test_generator = PascalVocGenerator(
-        args.pascal_path,
+    # create a generator valid data
+    valid_generator = PascalVocGenerator(
+        args,
         'test',
-        batch_size=args.batch_size,
-        transform_generator = test_image_data_generator
+        transform_generator=valid_image_data_generator
     )
 
+    return train_generator, valid_generator
+
+def parse_args():
+    """Parse input arguments."""
+    parser = argparse.ArgumentParser(description='Tensorflow Faster R-CNN demo')
+
+    parser.add_argument('--pascal_path', help='Path to dataset directory (ie. /tmp/VOCdevkit).', required=False, default=['VOC2007'], type=list)
+    parser.add_argument('--root_path', help='Size of the batches.', default= os.path.join(os.path.expanduser('~'), 'keras_yolo2'), type=str)
+
+    parser.add_argument('--args_setting', help='file name of args setting', default='args_setting.cfg', type=str)
+
+    parser.add_argument('--gpu', help='Id of the GPU to use (as reported by nvidia-smi).', default=0, type=int)
+    parser.add_argument('--epochs', help='num of the epochs.', default=100, type=int)
+    parser.add_argument('--tag', help='filename of the output.', default='voc', type=str)
+    parser.add_argument('--classes_path', help='Path to classes directory (ie. /tmp/voc_classes.txt).', default='voc_classes.txt',type=str)
+
+    parser.add_argument('--batch-size', help='Size of the batches.', default=4, type=int)
+
+    parser.add_argument('--save-path', help='Path for saving images with detections.',
+                        default=os.path.join(os.path.dirname(__file__), '../../', 'experiments/eval_output'))
+
+    parser.add_argument('--weight_path', help='Path to classes directory (ie. /tmp/voc.h5).', default='', type=str)
+
+    parser.add_argument('--tensorboard-dir', help='Log directory for Tensorboard output', default='./logs')
+    parser.add_argument('--no-snapshots', help='Disable saving snapshots.', dest='snapshots', action='store_false')
+    parser.add_argument('--snapshot-path',  help='Path to store snapshots of models during training (defaults to \'./snapshots\')',
+                        default=os.path.join(os.path.dirname(__file__), '../../snapshots'))
+    parser.add_argument('--evaluation', help='', default=False, type=bool)
+
+    # args = parser.parse_args()
+    args = check_args(parser.parse_args())
+    return args
+
+
+def check_args(parsed_args):
+    # TODO check the args
+    # reload parse arguments
+    args = load_setting_cfg(parsed_args)
+
+    return args
+
+def main():
+    # parse arguments
+    args = parse_args()
+    set_gpu(args)
+
+    # create the model
+    print('Creating model, this may take a second...')
+    model, eval_model = create_model()
+
+    # compile model (note: set loss to None since loss is added inside layer)
+    model.compile(loss=None, optimizer=keras.optimizers.adam(lr=1e-5, clipnorm=0.001))
+    eval_model.compile(loss=None, optimizer=keras.optimizers.adam(lr=1e-5, clipnorm=0.001))
+
+    # print model summary
+    print(model.summary(line_length=180))
+
+    train_generator, valid_generator = create_generators(args)
     # start training
+
+    callbacks = create_callbacks(model, eval_model, valid_generator, args)
 
     model.fit_generator(
         generator=train_generator,
         steps_per_epoch=len(train_generator.image_names) // args.batch_size,
         epochs=100,
         verbose=1,
-        validation_data=test_generator,
-        validation_steps=len(test_generator.image_names) // args.batch_size,
-        callbacks=[
-            keras.callbacks.ModelCheckpoint(os.path.join(args.root_path, 'snapshots/yolo(v2)_voc_best.h5'), monitor='val_loss', verbose=1, mode='min', save_best_only=True),
-            keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=10, verbose=1, mode='auto', min_delta=0.0001, cooldown=0, min_lr=0),
-        ],
+        validation_data=valid_generator,
+        validation_steps=len(valid_generator.image_names) // args.batch_size,
+        callbacks=callbacks,
     )
 
-    # store final result too
-    model.save('snapshots/yolo(v2)_voc_best.h5')
-
+if __name__ == '__main__':
+    main()
 
     '''
     cd tools

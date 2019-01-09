@@ -26,6 +26,7 @@ from ..preprocessing.generator import Generator
 from ..utils.image import read_image_bgr
 
 import os
+import json
 import numpy as np
 from six import raise_from
 from PIL import Image
@@ -58,6 +59,22 @@ voc_classes = {
     'tvmonitor'   : 19
 }
 
+def load_classes(path):
+    classes_dict = {}
+    try:
+        if os.path.splitext(path)[1]=='.txt':
+            classes_list = [line.replace('\n','').replace('\r','').strip()  for line in open(path,'r').readlines()]
+            for index,label in enumerate(classes_list):
+                classes_dict[label] = index
+        elif os.path.splitext(path)[1]=='.json':
+            classes_dict = json.load(open(path,'r'))
+        else:
+            raise NotImplementedError
+    except:
+        print('can not load classes file ,path of {}'.format(path))
+    assert len(classes_dict) > 0, 'Please check your classes file again ,path of {}'.format(path)
+    return classes_dict
+
 def _findNode(parent, name, debug_name = None, parse = None):
     if debug_name is None:
         debug_name = name
@@ -76,18 +93,18 @@ def _findNode(parent, name, debug_name = None, parse = None):
 class PascalVocGenerator(Generator):
     def __init__(
         self,
-        data_dir,
+        args,
         set_name,
-        classes=voc_classes,
         image_extension='.jpg',
         skip_truncated=False,
         skip_difficult=False,
         **kwargs
     ):
-        self.data_dir             = data_dir
+        self.data_dirs            = [os.path.join(args.root_path,'data/train_data',pkg) for pkg in args.pascal_path]
         self.set_name             = set_name
-        self.classes              = classes
-        self.image_names          = [l.strip().split(None, 1)[0] for l in open(os.path.join(data_dir, 'ImageSets', 'Main', set_name + '.txt')).readlines()]
+        self.classes              = load_classes(args.classes_path) if args.classes_path!=None else None
+        self.image_names          = self._load_image_names()
+        self.image_dirs           = self._load_image_dirs()
         self.image_extension      = image_extension
         self.skip_truncated       = skip_truncated
         self.skip_difficult       = skip_difficult
@@ -96,7 +113,29 @@ class PascalVocGenerator(Generator):
         for key, value in self.classes.items():
             self.labels[value] = key
 
+
+
         super(PascalVocGenerator, self).__init__(**kwargs)
+
+    def _load_image_names(self):
+        image_names = []
+        for data_dir in self.data_dirs:
+            path = os.path.join(data_dir, 'ImageSets', 'Main', self.set_name + '.txt')
+            if os.path.exists(path):
+                for l in open(path).readlines():
+                    image_names.append(l.strip().split(None, 1)[0])
+
+        return image_names
+
+    def _load_image_dirs(self):
+        image_dirs = []
+        for data_dir in self.data_dirs:
+            path = os.path.join(data_dir, 'ImageSets', 'Main', self.set_name + '.txt')
+            if os.path.exists(path):
+                for l in open(path).readlines():
+                    image_dirs.append(data_dir)
+
+        return image_dirs
 
     def size(self):
         return len(self.image_names)
@@ -111,7 +150,7 @@ class PascalVocGenerator(Generator):
         return self.labels[label]
 
     def image_aspect_ratio(self, image_index):
-        path  = os.path.join(self.data_dir, 'JPEGImages', self.image_names[image_index] + self.image_extension)
+        path  = os.path.join(self.image_dirs[image_index], 'JPEGImages', self.image_names[image_index] + self.image_extension)
         try:
             image = Image.open(path)
         except Exception as ex:
@@ -119,7 +158,7 @@ class PascalVocGenerator(Generator):
         return float(image.width) / float(image.height)
 
     def load_image(self, image_index):
-        path = os.path.join(self.data_dir, 'JPEGImages', self.image_names[image_index] + self.image_extension)
+        path = os.path.join(self.image_dirs[image_index], 'JPEGImages', self.image_names[image_index] + self.image_extension)
         return read_image_bgr(path)
 
     def __parse_annotation(self, element):
@@ -163,8 +202,10 @@ class PascalVocGenerator(Generator):
     def load_annotations(self, image_index):
         filename = self.image_names[image_index] + '.xml'
         try:
-            tree = ET.parse(os.path.join(self.data_dir, 'Annotations', filename))
-            return self.__parse_annotations(tree.getroot())
+            tree = ET.parse(os.path.join(self.image_dirs[image_index], 'Annotations', filename))
+            obj_boxes = self.__parse_annotations(tree.getroot())
+            assert len(obj_boxes) >0,'{} file not have object boxes'.format(os.path.join(self.data_dir, 'Annotations', filename))
+            return obj_boxes
         except ET.ParseError as e:
             raise_from(ValueError('invalid annotations file: {}: {}'.format(filename, e)), None)
         except ValueError as e:

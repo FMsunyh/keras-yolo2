@@ -34,7 +34,7 @@ from core.models.utils import compose
 
 
 class Yolo2(object):
-    def __init__(self, training=True, num_classes=21, weights=None):
+    def __init__(self, training=True, num_classes=20, weights=None):
         '''
         Darknet19 introduced in YOLO V2.
 
@@ -45,8 +45,6 @@ class Yolo2(object):
         self.num_classes = num_classes
 
         self.network()
-
-
 
     @wraps(Conv2D)
     def _Conv2D(self,*args, **kwargs):
@@ -116,13 +114,8 @@ class Yolo2(object):
     def __call__(self, inputs, mask=None):
         if self.training:
             image, gt_boxes, targets = inputs
-            image_shape = core.layers.Dimensions()(image)
         else:
             image = inputs
-
-        classification = None
-        regression = None
-        loss = None
 
         x = self.out_0(image)
         x = self.pooling_0(x)
@@ -159,5 +152,6 @@ class Yolo2(object):
 
         if self.training:
             loss = self.loss([x, gt_boxes, targets])
-
-        return loss, x
+            return loss, x
+        else:
+            return x
