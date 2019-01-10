@@ -26,18 +26,17 @@ import tensorflow as tf
 import numpy as np
 
 class Loss(keras.layers.Layer):
-    def __init__(self, num_classes=20, cell_size=13, boxes_per_cell=2, *args, **kwargs):
+    def __init__(self, num_classes=20, cell_size=13,  *args, **kwargs):
         self.num_classes = num_classes
         self.class_wt = np.ones(self.num_classes, dtype='float32')
 
         self.cell_size   = cell_size
-        self.boxes_per_cell   = boxes_per_cell
         self.batch_size = 4
-        self.anchors = list([0.57273, 0.677385, 1.87446, 2.06253, 3.33843, 5.47434, 7.88282, 3.52778, 9.77052, 9.16828])
-        self.object_scale = 1.0
+        self.anchors = list([0.97,1.67, 2.43,3.95, 3.97,8.30, 7.54,5.11, 9.95,10.37])
+        self.object_scale = 5.0
         self.noobject_scale = 0.5
-        self.class_scale = 2.0
-        self.coord_scale = 5.0
+        self.class_scale = 1.0
+        self.coord_scale = 1.0
 
         super(Loss, self).__init__(*args, **kwargs)
 

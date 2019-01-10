@@ -107,6 +107,17 @@ def create_callbacks(model, evaluation_model, validation_generator, args):
         evaluation = RedirectModel(evaluation, evaluation_model)
         callbacks.append(evaluation)
 
+    callbacks.append(keras.callbacks.ReduceLROnPlateau(
+        monitor='loss',
+        factor=0.1,
+        patience=2,
+        verbose=1,
+        mode='auto',
+        min_delta=0.0001,
+        cooldown=0,
+        min_lr=0
+    ))
+
     return callbacks
 
 def create_generators(args):
@@ -192,8 +203,8 @@ def main():
     model.load_weights(filepath=args.weight_path, by_name=True)
 
     # compile model (note: set loss to None since loss is added inside layer)
-    model.compile(loss=None, optimizer=keras.optimizers.adam(lr=1e-5, clipnorm=0.001))
-    eval_model.compile(loss=None, optimizer=keras.optimizers.adam(lr=1e-5, clipnorm=0.001))
+    model.compile(loss=None, optimizer=keras.optimizers.adam(lr=1e-5))
+    eval_model.compile(loss=None, optimizer=keras.optimizers.adam(lr=1e-5))
 
     # print model summary
     print(model.summary(line_length=180))

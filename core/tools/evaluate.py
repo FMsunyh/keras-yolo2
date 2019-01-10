@@ -133,7 +133,8 @@ def main(args=None):
     model = create_models(num_classes=generator.num_classes())
     # print(predict_model.summary())
 
-    model.load_weights(filepath=args.weight_path, by_name=True)
+    # model.load_weights(filepath=args.weight_path, by_name=True)
+    model.load_weights(filepath=args.weight_path)
 
     # predict_model.load_weights(filepath=args.weight_path, by_name=True)
 

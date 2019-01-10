@@ -45,7 +45,7 @@ class Generator(object):
         image_min_side=416,
         image_max_side=416,
         cell_size=13,
-        anchors=list([0.57273, 0.677385, 1.87446, 2.06253, 3.33843, 5.47434, 7.88282, 3.52778, 9.77052, 9.16828]),
+        anchors=list([0.97,1.67, 2.43,3.95, 3.97,8.30, 7.54,5.11, 9.95,10.37]),
         gt_box_max_buffer = 100,
         transform_parameters=None,
     ):
@@ -69,6 +69,8 @@ class Generator(object):
 
         self.group_images()
 
+    def get_anchors(self):
+        return self.anchors
 
     def size(self):
         raise NotImplementedError('size method not implemented')

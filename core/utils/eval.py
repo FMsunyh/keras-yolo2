@@ -128,8 +128,7 @@ def decode_netout(netout, anchors, nb_class=20, obj_threshold=0.3, nms_threshold
 
     return boxes
 
-def compute_output(output):
-    anchors = list([0.57273, 0.677385, 1.87446, 2.06253, 3.33843, 5.47434, 7.88282, 3.52778, 9.77052, 9.16828])
+def compute_output(output, anchors):
     bboxes = decode_netout(output[0], anchors)
 
     class_name = [box.get_label() for box in bboxes]
@@ -170,8 +169,9 @@ def _get_detections(generator, model, score_threshold=0.05, max_detections=100, 
         # classification, regression
         output = model.predict_on_batch(np.expand_dims(image, axis=0))
 
-        labels, boxes, scores = compute_output(output)
+        labels, boxes, scores = compute_output(output, generator.get_anchors())
 
+        # print(boxes)
         # select indices which have a score above the threshold
         indices = np.where(scores[0, :] > score_threshold)[0]
 
