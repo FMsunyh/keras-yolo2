@@ -58,7 +58,7 @@ def create_model(num_classes=20):
     # image = keras.layers.Input((None, None, 3))
     # gt_boxes = keras.layers.Input((7, 7, 25))
     gt_boxes = keras.layers.Input((1, 1, 1, 100, 4))
-    targets = keras.layers.Input((13, 13, 5, 25))
+    targets = keras.layers.Input((13, 13, 5, 4+1+num_classes))
     train_model = create_yolo2([image, gt_boxes,  targets], num_classes=num_classes, weights=None)
     eval_model = create_yolo2(keras.layers.Input((None, None, 3)), training=False, num_classes=num_classes, weights=None)
 
@@ -68,6 +68,10 @@ def create_callbacks(model, evaluation_model, validation_generator, args):
     callbacks = []
     # save the model
     if args.snapshots:
+        snapshot_dir = os.path.join(args.root_path, 'snapshots', args.tag)
+        if not os.path.exists(snapshot_dir):
+            os.makedirs(snapshot_dir)
+
         # ensure directory created first; otherwise h5py will error after epoch.
         os.makedirs(args.snapshot_path, exist_ok=True)
 
@@ -196,11 +200,11 @@ def main():
     args = parse_args()
     set_gpu(args)
 
+    train_generator, valid_generator = create_generators(args)
+
     # create the model
     print('Creating model, this may take a second...')
-    model, eval_model = create_model()
-
-    model.load_weights(filepath=args.weight_path, by_name=True)
+    model, eval_model = create_model(num_classes=train_generator.num_classes())
 
     # compile model (note: set loss to None since loss is added inside layer)
     model.compile(loss=None, optimizer=keras.optimizers.adam(lr=1e-5))
@@ -209,9 +213,11 @@ def main():
     # print model summary
     print(model.summary(line_length=180))
 
-    train_generator, valid_generator = create_generators(args)
-    # start training
+    if os.path.exists(args.weight_path):
+        model.load_weights(filepath=args.weight_path, by_name=True)
+        print('load model:', args.weight_path)
 
+    # start training
     callbacks = create_callbacks(model, eval_model, valid_generator, args)
 
     model.fit_generator(

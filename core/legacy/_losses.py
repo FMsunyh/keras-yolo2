@@ -26,12 +26,11 @@ import tensorflow as tf
 import numpy as np
 
 class Loss(keras.layers.Layer):
-    def __init__(self, num_classes=20, cell_size=13, boxes_per_cell=5, *args, **kwargs):
+    def __init__(self, num_classes=20, cell_size=13,  *args, **kwargs):
         self.num_classes = num_classes
         self.class_wt = np.ones(self.num_classes, dtype='float32')
 
         self.cell_size   = cell_size
-        self.boxes_per_cell = boxes_per_cell
         self.batch_size = 4
         self.anchors = list([0.97,1.67, 2.43,3.95, 3.97,8.30, 7.54,5.11, 9.95,10.37])
         self.object_scale = 5.0
@@ -70,12 +69,14 @@ class Loss(keras.layers.Layer):
 
         return [object_loss, noobject_loss]
 
+
     def call(self, inputs):
         '''
 
         :param inputs:
-        predicts: shape(None, 1470)
-        labels shape(None, 7, 7, 25)
+        y_pred: shape(None, 13, 13, 5, 4 + 1 + self.num_classes)
+        y_true: shape(None, 13, 13, 5, 4 + 1 + self.num_classes)
+        labels shape(None, 1, 1, 1, 100, 4)
         :return:
         '''
 
@@ -83,8 +84,7 @@ class Loss(keras.layers.Layer):
 
         mask_shape = tf.shape(y_true)[:4]
 
-        cell_x = tf.to_float(
-            tf.reshape(tf.tile(tf.range(self.cell_size), [self.cell_size]), (1, self.cell_size, self.cell_size, 1, 1)))
+        cell_x = tf.to_float(tf.reshape(tf.tile(tf.range(self.cell_size), [self.cell_size]), (1, self.cell_size, self.cell_size, 1, 1)))
         cell_y = tf.transpose(cell_x, (0, 2, 1, 3, 4))
 
         cell_grid = tf.tile(tf.concat([cell_x, cell_y], -1), [self.batch_size, 1, 1, 5, 1])
@@ -93,11 +93,13 @@ class Loss(keras.layers.Layer):
         conf_mask = tf.zeros(mask_shape)
         class_mask = tf.zeros(mask_shape)
 
+        # seen = tf.Variable(0.)
+        # total_recall = tf.Variable(0.)
 
         """
         Adjust prediction
         """
-        ### adjust x and y
+        ### adjust x and y      
         pred_box_xy = tf.sigmoid(y_pred[..., :2]) + cell_grid
 
         ### adjust w and h
@@ -185,6 +187,7 @@ class Loss(keras.layers.Layer):
         ### class mask: simply the position of the ground truth boxes (the predictors)
         class_mask = y_true[..., 4] * tf.gather(self.class_wt, true_box_class) * self.class_scale
 
+
         """
         Finalize the loss
         """
@@ -192,8 +195,14 @@ class Loss(keras.layers.Layer):
         nb_conf_box = tf.reduce_sum(tf.to_float(conf_mask > 0.0))
         nb_class_box = tf.reduce_sum(tf.to_float(class_mask > 0.0))
 
+        # regression_target = tf
+        # regression
+
         loss_xy = tf.reduce_sum(tf.square(true_box_xy - pred_box_xy) * coord_mask) / (nb_coord_box + 1e-6) / 2.
         loss_wh = tf.reduce_sum(tf.square(true_box_wh - pred_box_wh) * coord_mask) / (nb_coord_box + 1e-6) / 2.
+
+
+
         loss_conf = tf.reduce_sum(tf.square(true_box_conf - pred_box_conf) * conf_mask) / (nb_conf_box + 1e-6) / 2.
         loss_class = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=true_box_class, logits=pred_box_class)
         loss_class = tf.reduce_sum(loss_class * class_mask) / (nb_class_box + 1e-6)
@@ -202,61 +211,13 @@ class Loss(keras.layers.Layer):
 
         self.add_loss(loss)
         return loss
-
-    def _call(self, inputs):
-        '''
-
-        :param inputs:
-        y_pred: shape(None, 13 * 13 * 5 * (4 + 1 + self.num_classes)) 《== shape(None, 13, 13, 5, (4 + 1 + self.num_classes))
-        y_true: shape(None, 13, 13, 5, 4 + 1 + self.num_classes)
-        labels shape(None, 1, 1, 1, 100, 4)
-        :return:
-        '''
-
-        y_pred, gt_boxes, y_true = inputs
-
-        mask_shape = tf.shape(y_true)[:4]
-
-        cell_x = tf.to_float(tf.reshape(tf.tile(tf.range(self.cell_size), [self.cell_size]), (1, self.cell_size, self.cell_size, 1, 1)))
-        cell_y = tf.transpose(cell_x, (0, 2, 1, 3, 4))
-
-        cell_grid = tf.tile(tf.concat([cell_x, cell_y], -1), [self.batch_size, 1, 1, 5, 1])
-
-        coord_mask = tf.zeros(mask_shape)
-        conf_mask = tf.zeros(mask_shape)
-        class_mask = tf.zeros(mask_shape)
-
         
-        index_classification = self.cell_size * self.cell_size * self.boxes_per_cell * self.num_classes
-        index_confidence = self.cell_size * self.cell_size * self.boxes_per_cell * (self.num_classes+1)
-
-        pred_classes = tf.reshape(y_pred[:, :index_classification], [-1, self.cell_size, self.cell_size, self.boxes_per_cell, self.num_classes])
-        pred_confidence = tf.reshape(y_pred[:, index_classification:index_confidence],[-1, self.cell_size, self.cell_size, self.boxes_per_cell, 1])
-        pred_boxes = tf.reshape(y_pred[:, index_confidence:], [-1, self.cell_size, self.cell_size, self.boxes_per_cell, 4])
-
-        pred_boxes_xy = tf.sigmoid(pred_boxes[..., :2]) + cell_grid
-        pred_boxes_wh = tf.exp(pred_boxes[..., 2:4]) * tf.reshape(self.anchors, [1, 1, 1, 5, 2])
-        pred_confidence = tf.sigmoid(pred_confidence)
-
-        gt_boxes_xy = y_true[..., 0:2]
-        gt_boxes_wh = y_true[..., 2:4]
-        regression = []
-        regression_labels = []
-
-        # # regression loss (localization loss) coord_loss
-        # coord_loss = self.regression_loss(regression_target, predict_boxes, object_mask)
-
-
-        iou_predict_truth = self.calc_iou(regression, regression_labels)
-
-        confidence_labels = iou_predict_truth
-        # confidence loss
-        object_loss, noobject_loss = self.confidence_loss(pred_confidence, confidence_labels, object_mask)
-
-        classification_labels = tf.argmax(y_true[..., 5:], -1)
-        # classification loss
-        cls_loss = self.classification_loss(classification_labels, pred_classes, response)
-
+        # index_classification = tf.multiply(tf.pow(self.cell_size, 2), self.num_classes)
+        # index_confidence = tf.multiply(tf.pow(self.cell_size, 2), self.num_classes + self.boxes_per_cell)
+        # 
+        # 
+        # predict_classes = tf.reshape(predicts[:, :index_classification], [-1, self.cell_size, self.cell_size, self.num_classes])
+        # predict_scales = tf.reshape(predicts[:, index_classification:index_confidence], [-1, self.cell_size, self.cell_size, self.boxes_per_cell])
         # predict_boxes = tf.reshape(predicts[:, index_confidence:], [-1, self.cell_size, self.cell_size, self.boxes_per_cell, 4])
         # 
         # response = tf.reshape(labels[:, :, :, 0], [-1, self.cell_size, self.cell_size, 1])

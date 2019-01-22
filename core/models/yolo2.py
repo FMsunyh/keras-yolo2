@@ -108,6 +108,11 @@ class Yolo2(object):
         self.output = Conv2D(5 * (4 + 1 + self.num_classes), kernel_size=(1, 1), strides=(1, 1), padding='same', name='DetectionLayer',  kernel_initializer='lecun_normal')
         self.reshape = Reshape((13, 13, 5, 4 + 1 + self.num_classes))
 
+        # self.flatten = keras.layers.Flatten(name='Flatten')
+        # self.fc_0 = keras.layers.Dense(units=512, name='fc_0')
+        # self.fc_1 = keras.layers.Dense(units=4096, name='fc_1')
+        # self.fc_2 = keras.layers.Dense(units=13 * 13 * 30, name='fc_2')
+
         if self.training:
             self.loss = core.layers.Loss(num_classes=self.num_classes)
 
@@ -149,6 +154,11 @@ class Yolo2(object):
         x = self.out_19(x)
         x = self.output(x)
         x = self.reshape(x)
+
+        # x = self.flatten(x)
+        # x = self.fc_0(x)
+        # x = self.fc_1(x)
+        # x = self.fc_2(x)
 
         if self.training:
             loss = self.loss([x, gt_boxes, targets])

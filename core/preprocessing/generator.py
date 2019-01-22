@@ -205,8 +205,8 @@ class Generator(object):
                 (annotation[:,3] - annotation[:,1])], axis=1)
             # cls_ind = [self.label_to_name(label) for label in annotation[:, 4]]
 
-            box_chw[:,0] = (box_chw[:,0] / w) * self.cell_size
-            box_chw[:,1] = box_chw[:,1] / h * self.cell_size
+            box_chw[:, 0] = box_chw[:, 0] / w * self.cell_size
+            box_chw[:, 1] = box_chw[:, 1] / h * self.cell_size
             box_chw[:, 2] = box_chw[:, 2] / w * self.cell_size
             box_chw[:, 3] = box_chw[:, 3] / h * self.cell_size
 
@@ -234,9 +234,9 @@ class Generator(object):
                 y_ind = np.int32(box[1])
 
                 #Each grid cell predicts five object
-                if label[y_ind, x_ind, best_anchor, 4] == 1:
-                    # alreadly existed anchor, skill it
-                    continue
+                # if label[y_ind, x_ind, best_anchor, 4] == 1:
+                #     # alreadly existed anchor, skill it
+                #     continue
 
                 label[y_ind, x_ind, best_anchor, 0:4]        = box
                 label[y_ind, x_ind, best_anchor, 4]          = 1

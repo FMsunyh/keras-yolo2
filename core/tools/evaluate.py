@@ -134,7 +134,9 @@ def main(args=None):
     # print(predict_model.summary())
 
     # model.load_weights(filepath=args.weight_path, by_name=True)
-    model.load_weights(filepath=args.weight_path)
+    if os.path.exists(args.weight_path):
+        model.load_weights(filepath=args.weight_path)
+        print(args.weight_path)
 
     # predict_model.load_weights(filepath=args.weight_path, by_name=True)
 
