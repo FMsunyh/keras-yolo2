@@ -58,7 +58,7 @@ def preprocess_image(x):
 
     return x
 
-def resize_image(image, min_side=448, max_side=448):
+def resize_image(image, min_side=416, max_side=416):
     '''
     resize image to dsize
     :param img: input (h, w, 3) = (rows, cols, 3)

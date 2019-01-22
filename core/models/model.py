@@ -23,18 +23,12 @@ limitations under the License.
 # -*- coding: utf-8 -*-
 
 import keras
-import core
 from core.models import Yolo2
 
-def create_yolo2(inputs, training=True, num_classes=20, weights=None, *args, **kwargs):
-    if training:
-        image, gt_boxes, targets = inputs
-        loss, output = Yolo2(training=training, num_classes=num_classes)([image, gt_boxes, targets])
-        model = keras.models.Model(inputs=inputs, outputs=[loss,output])
-    else:
-        image = inputs
-        output = Yolo2(training=training, num_classes=num_classes)(image)
-        model = keras.models.Model(inputs=inputs, outputs=output)
+def create_yolo2(inputs, num_classes=20, weights=None, *args, **kwargs):
+    image = inputs
+    output = Yolo2(num_classes=num_classes)(image)
+    model = keras.models.Model(inputs=inputs, outputs=output, *args, **kwargs)
 
     if weights is not None:
         model.load_weights(weights)
