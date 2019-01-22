@@ -59,8 +59,8 @@ def create_model(num_classes=20):
     # gt_boxes = keras.layers.Input((7, 7, 25))
     gt_boxes = keras.layers.Input((1, 1, 1, 100, 4))
     targets = keras.layers.Input((13, 13, 5, 4+1+num_classes))
-    train_model = create_yolo2([image, gt_boxes,  targets], num_classes=num_classes, weights=None)
-    eval_model = create_yolo2(keras.layers.Input((None, None, 3)), training=False, num_classes=num_classes, weights=None)
+    train_model = create_yolo2([image, gt_boxes,  targets], training=True, num_classes=num_classes, weights=None)
+    eval_model  = create_yolo2(keras.layers.Input((None, None, 3)), training=False, num_classes=num_classes, weights=None)
 
     return train_model, eval_model
 

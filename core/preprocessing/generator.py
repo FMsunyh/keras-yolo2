@@ -193,21 +193,20 @@ class Generator(object):
         # same size for all batch image
         h, w, _ = image_group[0].shape
 
-        # gt_batch = np.zeros((self.batch_size, 1, 1, 1, self.gt_box_max_buffer, 4))
-        gt_batch = np.zeros((self.batch_size, 1, 1, self.gt_box_max_buffer, 4+1+self.num_classes()))
-        targets =  np.zeros((self.batch_size, self.cell_size, self.cell_size, self.num_boxes, 4+1+self.num_classes()))
-        targets_gt_boxes =  np.zeros((self.batch_size, self.cell_size+1, self.cell_size+1, self.num_boxes+self.gt_box_max_buffer, 4+1+self.num_classes()))
+        gt_batch = np.zeros((self.batch_size, 1, 1, 1, self.gt_box_max_buffer, 4))
+        targets = np.zeros(
+            (self.batch_size, self.cell_size, self.cell_size, self.num_boxes, 4 + 1 + self.num_classes()))
         for annotation_index, annotation in enumerate(annotations_group):
-            label = np.zeros((self.cell_size, self.cell_size,self.num_boxes, 4+1+self.num_classes()))
-            
-            box_chw =np.stack([
-                (annotation[:,0] + annotation[:,2])/2,
-                (annotation[:,1] + annotation[:,3])/2,
-                (annotation[:,2] - annotation[:,0]),
-                (annotation[:,3] - annotation[:,1])], axis=1)
+            label = np.zeros((self.cell_size, self.cell_size, self.num_boxes, 4 + 1 + self.num_classes()))
+
+            box_chw = np.stack([
+                (annotation[:, 0] + annotation[:, 2]) / 2,
+                (annotation[:, 1] + annotation[:, 3]) / 2,
+                (annotation[:, 2] - annotation[:, 0]),
+                (annotation[:, 3] - annotation[:, 1])], axis=1)
             # cls_ind = [self.label_to_name(label) for label in annotation[:, 4]]
 
-            box_chw[:, 0] = box_chw[:, 0] / w * self.cell_size
+            box_chw[:, 0] = (box_chw[:, 0] / w) * self.cell_size
             box_chw[:, 1] = box_chw[:, 1] / h * self.cell_size
             box_chw[:, 2] = box_chw[:, 2] / w * self.cell_size
             box_chw[:, 3] = box_chw[:, 3] / h * self.cell_size
@@ -230,29 +229,24 @@ class Generator(object):
                         best_anchor = i
                         max_iou = iou
 
-
                 # x_ind， y_ind
                 x_ind = np.int32(box[0])
                 y_ind = np.int32(box[1])
 
-                #Each grid cell predicts five object
-                # if label[y_ind, x_ind, best_anchor, 4] == 1:
-                #     # alreadly existed anchor, skill it
-                #     continue
+                # Each grid cell predicts five object
+                if label[y_ind, x_ind, best_anchor, 4] == 1:
+                    # alreadly existed anchor, skill it
+                    continue
 
-                label[y_ind, x_ind, best_anchor, 0:4]        = box
-                label[y_ind, x_ind, best_anchor, 4]          = 1
-                label[y_ind, x_ind, best_anchor, 5+class_index]  = 1
+                label[y_ind, x_ind, best_anchor, 0:4] = box
+                label[y_ind, x_ind, best_anchor, 4] = 1
+                label[y_ind, x_ind, best_anchor, 5 + class_index] = 1
 
                 # index must less than self.gt_box_max_buffer
-                gt_batch[annotation_index, 0, 0, index, :4] = box
+                gt_batch[annotation_index, 0, 0, 0, index] = box
             targets[annotation_index] = label
 
-        targets_gt_boxes[:, :self.cell_size, :self.cell_size, :self.num_boxes, :] = targets
-        targets_gt_boxes[:, self.cell_size:, self.cell_size:, self.num_boxes:, :] = gt_batch
-
-        # return np.asarray(gt_batch), np.asarray(targets)
-        return np.asarray(targets_gt_boxes)
+        return np.asarray(gt_batch), np.asarray(targets)
 
     def compute_input_output(self, group):
         # load images and annotations
@@ -269,9 +263,9 @@ class Generator(object):
         inputs = self.compute_inputs(image_group)
 
         # compute network targets
-        targets = self.compute_targets(image_group, annotations_group)
+        gt_boxes, targets = self.compute_targets(image_group, annotations_group)
 
-        return inputs, targets
+        return [inputs, gt_boxes, targets], None
 
     def __next__(self):
         return self.next()
