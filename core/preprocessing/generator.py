@@ -45,7 +45,7 @@ class Generator(object):
         image_min_side=416,
         image_max_side=416,
         cell_size=13,
-        anchors=list([0.97,1.67, 2.43,3.95, 3.97,8.30, 7.54,5.11, 9.95,10.37]),
+        anchors=list([2.56,2.97, 2.77,4.63, 3.71,3.76, 3.93,5.22, 5.13,5.62]),
         gt_box_max_buffer = 100,
         transform_parameters=None,
     ):

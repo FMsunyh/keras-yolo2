@@ -33,42 +33,13 @@ class Loss(keras.layers.Layer):
         self.cell_size   = cell_size
         self.boxes_per_cell = boxes_per_cell
         self.batch_size = 4
-        self.anchors = list([0.97,1.67, 2.43,3.95, 3.97,8.30, 7.54,5.11, 9.95,10.37])
+        self.anchors = list([2.56,2.97, 2.77,4.63, 3.71,3.76, 3.93,5.22, 5.13,5.62])
         self.object_scale = 5.0
         self.noobject_scale = 0.5
         self.class_scale = 1.0
         self.coord_scale = 1.0
 
         super(Loss, self).__init__(*args, **kwargs)
-
-
-
-    def classification_loss(self,labels,  classification, response):
-        class_delta = response * (labels - classification)
-        cls_loss = tf.reduce_mean(tf.reduce_sum(tf.square(class_delta), axis=[1, 2, 3]), name='cls_loss') * self.class_scale
-
-        return cls_loss
-
-    def regression_loss(self, regression_target, regression, object_mask):
-        coord_mask = tf.expand_dims(object_mask, 4)
-        boxes_delta = coord_mask * (regression_target - regression)
-        coord_loss = tf.reduce_mean(tf.reduce_sum(tf.square(boxes_delta), axis=[1, 2, 3, 4]), name='coord_loss') * self.coord_scale
-        # reg_loss = tf.constant(0,dtype=tf.float32)
-        return coord_loss
-
-    def confidence_loss(self,predict_scales, iou_predict_truth, object_mask):
-        # calculate no_I tensor [CELL_SIZE, CELL_SIZE, BOXES_PER_CELL]
-        noobject_mask = tf.ones_like(object_mask, dtype=tf.float32) - object_mask
-
-        # object_loss
-        object_delta = object_mask * (iou_predict_truth - predict_scales)
-        object_loss = tf.reduce_mean(tf.reduce_sum(tf.square(object_delta), axis=[1, 2, 3]),  name='object_loss') * self.object_scale
-
-        # noobject_loss
-        noobject_delta = noobject_mask * predict_scales
-        noobject_loss = tf.reduce_mean(tf.reduce_sum(tf.square(noobject_delta), axis=[1, 2, 3]), name='noobject_loss') * self.noobject_scale
-
-        return [object_loss, noobject_loss]
 
     def call(self, inputs):
         '''
@@ -83,8 +54,7 @@ class Loss(keras.layers.Layer):
 
         mask_shape = tf.shape(y_true)[:4]
 
-        cell_x = tf.to_float(
-            tf.reshape(tf.tile(tf.range(self.cell_size), [self.cell_size]), (1, self.cell_size, self.cell_size, 1, 1)))
+        cell_x = tf.to_float(tf.reshape(tf.tile(tf.range(self.cell_size), [self.cell_size]), (1, self.cell_size, self.cell_size, 1, 1)))
         cell_y = tf.transpose(cell_x, (0, 2, 1, 3, 4))
 
         cell_grid = tf.tile(tf.concat([cell_x, cell_y], -1), [self.batch_size, 1, 1, 5, 1])
@@ -99,6 +69,8 @@ class Loss(keras.layers.Layer):
         """
         ### adjust x and y
         pred_box_xy = tf.sigmoid(y_pred[..., :2]) + cell_grid
+
+        # pred_box_xy = tf.Print(pred_box_xy, [tf.shape(pred_box_xy)], 'pred_box_xy', summarize=100)
 
         ### adjust w and h
         pred_box_wh = tf.exp(y_pred[..., 2:4]) * np.reshape(self.anchors, [1, 1, 1, 5, 2])
@@ -143,6 +115,10 @@ class Loss(keras.layers.Layer):
         ### adjust class probabilities
         true_box_class = tf.argmax(y_true[..., 5:], -1)
 
+        # true_box_class = tf.Print(true_box_class, [tf.shape(true_box_class), true_box_class], 'true_box_class', summarize=100)
+        # pred_box_class = tf.Print(pred_box_class, [tf.shape(pred_box_class)], 'pred_box_class', summarize=100)
+        # y_true = tf.Print(y_true, [tf.shape(y_true), y_true[..., 5:]], 'y_true', summarize=100)
+
         """
         Determine the masks
         """
@@ -184,6 +160,7 @@ class Loss(keras.layers.Layer):
 
         ### class mask: simply the position of the ground truth boxes (the predictors)
         class_mask = y_true[..., 4] * tf.gather(self.class_wt, true_box_class) * self.class_scale
+        # class_mask = tf.Print(class_mask, [class_mask], 'class_mask', summarize=100)
 
         """
         Finalize the loss
@@ -191,10 +168,16 @@ class Loss(keras.layers.Layer):
         nb_coord_box = tf.reduce_sum(tf.to_float(coord_mask > 0.0))
         nb_conf_box = tf.reduce_sum(tf.to_float(conf_mask > 0.0))
         nb_class_box = tf.reduce_sum(tf.to_float(class_mask > 0.0))
+        # nb_class_box = tf.Print(nb_class_box, [nb_class_box], 'nb_class_box', summarize=100)
+
 
         loss_xy = tf.reduce_sum(tf.square(true_box_xy - pred_box_xy) * coord_mask) / (nb_coord_box + 1e-6) / 2.
         loss_wh = tf.reduce_sum(tf.square(true_box_wh - pred_box_wh) * coord_mask) / (nb_coord_box + 1e-6) / 2.
         loss_conf = tf.reduce_sum(tf.square(true_box_conf - pred_box_conf) * conf_mask) / (nb_conf_box + 1e-6) / 2.
+
+        # true_box_class = tf.Print(true_box_class,[true_box_class],'true_box_class', summarize=100)
+        # pred_box_class = tf.Print(pred_box_class,[pred_box_class],'pred_box_class', summarize=100)
+
         loss_class = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=true_box_class, logits=pred_box_class)
         loss_class = tf.reduce_sum(loss_class * class_mask) / (nb_class_box + 1e-6)
 
