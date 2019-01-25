@@ -206,7 +206,7 @@ class Generator(object):
                 (annotation[:, 3] - annotation[:, 1])], axis=1)
             # cls_ind = [self.label_to_name(label) for label in annotation[:, 4]]
 
-            box_chw[:, 0] = (box_chw[:, 0] / w) * self.cell_size
+            box_chw[:, 0] = box_chw[:, 0] / w * self.cell_size
             box_chw[:, 1] = box_chw[:, 1] / h * self.cell_size
             box_chw[:, 2] = box_chw[:, 2] / w * self.cell_size
             box_chw[:, 3] = box_chw[:, 3] / h * self.cell_size

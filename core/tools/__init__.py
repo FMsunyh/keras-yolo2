@@ -21,3 +21,4 @@ limitations under the License.
 # @Software: ZJ_AI
 # -----------------------------------------------------
 # -*- coding: utf-8 -*-
+Debug = False

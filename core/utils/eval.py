@@ -77,14 +77,15 @@ def _softmax(x, axis=-1, t=-100.):
 
     return e_x / e_x.sum(axis, keepdims=True)
 
-def decode_netout(netout, anchors, nb_class=20, obj_threshold=0.3, nms_threshold=0.3):
+def decode_netout(netout, anchors, num_classes=20, obj_threshold=0.1, nms_threshold=0.3):
     grid_h, grid_w, nb_box = netout.shape[:3]
 
     boxes = []
 
     # decode the output by the network
     netout[..., 4] = _sigmoid(netout[..., 4])
-    netout[..., 5:] = netout[..., 4][..., np.newaxis] * _softmax(netout[..., 5:])
+    # netout[..., 5:] = netout[..., 4][..., np.newaxis] * _softmax(netout[..., 5:])
+    netout[..., 5:] = np.expand_dims(netout[..., 4],axis=-1) * _softmax(netout[..., 5:])
     netout[..., 5:] *= netout[..., 5:] > obj_threshold
 
     for row in range(grid_h):
@@ -108,7 +109,7 @@ def decode_netout(netout, anchors, nb_class=20, obj_threshold=0.3, nms_threshold
                     boxes.append(box)
 
     # suppress non-maximal boxes
-    for c in range(nb_class):
+    for c in range(num_classes):
         sorted_indices = list(reversed(np.argsort([box.classes[c] for box in boxes])))
 
         for i in range(len(sorted_indices)):
@@ -128,8 +129,8 @@ def decode_netout(netout, anchors, nb_class=20, obj_threshold=0.3, nms_threshold
 
     return boxes
 
-def compute_output(output, anchors):
-    bboxes = decode_netout(output[0], anchors)
+def compute_output(output, anchors, num_classes=20):
+    bboxes = decode_netout(output[0], anchors, num_classes=num_classes)
 
     class_name = [box.get_label() for box in bboxes]
     cls_socre = [box.get_score() for box in bboxes]
@@ -169,7 +170,7 @@ def _get_detections(generator, model, score_threshold=0.05, max_detections=100, 
         # classification, regression
         output = model.predict_on_batch(np.expand_dims(image, axis=0))
 
-        labels, boxes, scores = compute_output(output, generator.get_anchors())
+        labels, boxes, scores = compute_output(output, generator.get_anchors(), generator.num_classes())
 
         # print(boxes)
         # select indices which have a score above the threshold
@@ -198,9 +199,9 @@ def _get_detections(generator, model, score_threshold=0.05, max_detections=100, 
 
         if save_path is not None:
             draw_annotations(raw_image, generator.load_annotations(i), label_to_name=generator.label_to_name)
-            draw_detections(raw_image, image_boxes, image_scores, image_labels, label_to_name=generator.label_to_name, score_threshold=0.5)
+            draw_detections(raw_image, image_boxes, image_scores, image_labels, label_to_name=generator.label_to_name, score_threshold=score_threshold)
 
-            cv2.imwrite(os.path.join(save_path, '{}.png'.format(i)), raw_image)
+            cv2.imwrite(os.path.join(save_path, '{}.png'.format(str(i).zfill(4))), raw_image)
 
         # copy detections to all_detections
         for label in range(generator.num_classes()):

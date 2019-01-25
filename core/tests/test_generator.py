@@ -23,6 +23,9 @@ limitations under the License.
 # -*- coding: utf-8 -*-
 
 #!/usr/bin/python3
+import cv2
+
+from core.utils.visualization import draw_detections, draw_box, draw_caption
 
 """
 Copyright 2018-2019  Firmin.Sun (fmsunyh@gmail.com)
@@ -51,6 +54,8 @@ import keras
 import keras.preprocessing.image
 from core.preprocessing import PascalVocGenerator
 from core.utils.config import load_setting_cfg
+import numpy as np
+
 
 def create_generators(args):
     # create image data generator objects
@@ -70,6 +75,7 @@ def create_generators(args):
     train_generator = PascalVocGenerator(
         args,
         'trainval',
+        batch_size=args.batch_size,
         transform_generator=train_image_data_generator
     )
 
@@ -77,6 +83,7 @@ def create_generators(args):
     valid_generator = PascalVocGenerator(
         args,
         'test',
+        batch_size=args.batch_size,
         transform_generator=valid_image_data_generator
     )
 
@@ -126,8 +133,32 @@ def main():
 
     train_generator, valid_generator = create_generators(args)
 
-    a = train_generator.next()
-    print(a)
+    input ,_= train_generator.next()
+    images, gt_boxes, targets = input
+    save_path = '/home/syh/keras_yolo2/experiments/test_generator/'
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
+
+    for i in range(args.batch_size):
+        image = images[i]
+        box_chw = gt_boxes[i].reshape((-1, 4)) / 13 * 416
+        annotations = np.stack([
+            (box_chw[:, 0] - box_chw[:, 2] / 2),
+            (box_chw[:, 1] - box_chw[:, 3] / 2),
+            (box_chw[:, 0] + box_chw[:, 2] / 2),
+            (box_chw[:, 1] + box_chw[:, 3] / 2) ], axis=1)
+
+        print(annotations)
+
+        for j in range(len(annotations)):
+            c = (0, 255, 0)
+            draw_box(image, annotations[j, :], color=c)
+
+            # draw labels
+            # caption = (label_to_name(labels[i]) if label_to_name else labels[i]) + ': {0:.2f}'.format(scores[i])
+            # draw_caption(image, boxes[i, :], caption)
+
+        cv2.imwrite(os.path.join(save_path, '{}.png'.format(str(i).zfill(4))), image)
     # start training
 
 if __name__ == '__main__':
