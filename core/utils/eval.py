@@ -164,7 +164,7 @@ def _get_detections(generator, model, score_threshold=0.05, max_detections=100, 
     all_detections = [[None for i in range(generator.num_classes())] for j in range(generator.size())]
 
     for i in range(generator.size()):
-        raw_image, image, scale, im_shape= _compute_input(generator, i)
+        raw_image, image, scale, resize_im_shape= _compute_input(generator, i)
         # run network
 
         # classification, regression
@@ -181,10 +181,15 @@ def _get_detections(generator, model, score_threshold=0.05, max_detections=100, 
 
         if len(labels[0])==0:
             boxes = np.zeros((1,1,4))
-        boxes[0, :, 0] *= im_shape[1] # w
-        boxes[0, :, 1] *= im_shape[0]
-        boxes[0, :, 2] *= im_shape[1]
-        boxes[0, :, 3] *= im_shape[0]
+        boxes[0, :, 0] *= raw_image.shape[1] # w
+        boxes[0, :, 1] *= raw_image.shape[0]
+        boxes[0, :, 2] *= raw_image.shape[1]
+        boxes[0, :, 3] *= raw_image.shape[0]
+
+        # boxes[0, :, 0] /= scale[1]  # w
+        # boxes[0, :, 1] /= scale[0]
+        # boxes[0, :, 2] /= scale[1]
+        # boxes[0, :, 3] /= scale[0]
 
         # find the order with which to sort the scores
         scores_sort = np.argsort(-scores)[:max_detections]
