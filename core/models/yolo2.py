@@ -34,7 +34,7 @@ from core.models.utils import compose
 
 
 class Yolo2(object):
-    def __init__(self, training=True, num_classes=20):
+    def __init__(self, training=True, batch_size=4, anchors=None, num_classes=20):
         '''
         Darknet19 introduced in YOLO V2.
 
@@ -42,6 +42,8 @@ class Yolo2(object):
         super(Yolo2, self).__init__()
 
         self.training = training
+        self.batch_size = batch_size
+        self.anchors = anchors
         self.num_classes = num_classes
 
         self.network()
@@ -114,7 +116,7 @@ class Yolo2(object):
         # self.fc_2 = keras.layers.Dense(units=13 * 13 * 30, name='fc_2')
 
         if self.training:
-            self.loss = core.layers.Loss(num_classes=self.num_classes)
+            self.loss = core.layers.Loss(num_classes=self.num_classes, batch_size=self.batch_size, anchors=self.anchors)
 
     def __call__(self, inputs, mask=None):
         if self.training:

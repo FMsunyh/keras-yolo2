@@ -30,13 +30,14 @@ from core.tools import Debug
 
 
 class Loss(keras.layers.Layer):
-    def __init__(self, num_classes=20, cell_size=13, boxes_per_cell=5, *args, **kwargs):
+    def __init__(self, num_classes=20, cell_size=13, boxes_per_cell=5, batch_size=4, anchors=None, *args, **kwargs):
         self.num_classes = num_classes
 
         self.cell_size   = cell_size
         self.boxes_per_cell = boxes_per_cell
-        self.batch_size = 4
-        self.anchors = list([2.56,2.97, 2.77,4.63, 3.71,3.76, 3.93,5.22, 5.13,5.62])
+        self.batch_size = batch_size
+        # self.anchors = list([2.56,2.97, 2.77,4.63, 3.71,3.76, 3.93,5.22, 5.13,5.62])
+        self.anchors = anchors
         self.object_scale = 5.0
         self.noobject_scale = 1.0
         self.class_scale = 1.0
@@ -222,107 +223,6 @@ class Loss(keras.layers.Layer):
 
         self.add_loss(loss)
         return loss
-
-    def _call(self, inputs):
-        '''
-
-        :param inputs:
-        y_pred: shape(None, 13 * 13 * 5 * (4 + 1 + self.num_classes)) 《== shape(None, 13, 13, 5, (4 + 1 + self.num_classes))
-        y_true: shape(None, 13, 13, 5, 4 + 1 + self.num_classes)
-        labels shape(None, 1, 1, 1, 100, 4)
-        :return:
-        '''
-
-        y_pred, gt_boxes, y_true = inputs
-
-        mask_shape = tf.shape(y_true)[:4]
-
-        cell_x = tf.to_float(tf.reshape(tf.tile(tf.range(self.cell_size), [self.cell_size]), (1, self.cell_size, self.cell_size, 1, 1)))
-        cell_y = tf.transpose(cell_x, (0, 2, 1, 3, 4))
-
-        cell_grid = tf.tile(tf.concat([cell_x, cell_y], -1), [self.batch_size, 1, 1, 5, 1])
-
-        coord_mask = tf.zeros(mask_shape)
-        conf_mask = tf.zeros(mask_shape)
-        class_mask = tf.zeros(mask_shape)
-
-        
-        index_classification = self.cell_size * self.cell_size * self.boxes_per_cell * self.num_classes
-        index_confidence = self.cell_size * self.cell_size * self.boxes_per_cell * (self.num_classes+1)
-
-        pred_classes = tf.reshape(y_pred[:, :index_classification], [-1, self.cell_size, self.cell_size, self.boxes_per_cell, self.num_classes])
-        pred_confidence = tf.reshape(y_pred[:, index_classification:index_confidence],[-1, self.cell_size, self.cell_size, self.boxes_per_cell, 1])
-        pred_boxes = tf.reshape(y_pred[:, index_confidence:], [-1, self.cell_size, self.cell_size, self.boxes_per_cell, 4])
-
-        pred_boxes_xy = tf.sigmoid(pred_boxes[..., :2]) + cell_grid
-        pred_boxes_wh = tf.exp(pred_boxes[..., 2:4]) * tf.reshape(self.anchors, [1, 1, 1, 5, 2])
-        pred_confidence = tf.sigmoid(pred_confidence)
-
-        gt_boxes_xy = y_true[..., 0:2]
-        gt_boxes_wh = y_true[..., 2:4]
-        regression = []
-        regression_labels = []
-
-        # # regression loss (localization loss) coord_loss
-        # coord_loss = self.regression_loss(regression_target, predict_boxes, object_mask)
-
-
-        iou_predict_truth = self.calc_iou(regression, regression_labels)
-
-        confidence_labels = iou_predict_truth
-        # confidence loss
-        object_loss, noobject_loss = self.confidence_loss(pred_confidence, confidence_labels, object_mask)
-
-        classification_labels = tf.argmax(y_true[..., 5:], -1)
-        # classification loss
-        cls_loss = self.classification_loss(classification_labels, pred_classes, response)
-
-        # predict_boxes = tf.reshape(predicts[:, index_confidence:], [-1, self.cell_size, self.cell_size, self.boxes_per_cell, 4])
-        # 
-        # response = tf.reshape(labels[:, :, :, 0], [-1, self.cell_size, self.cell_size, 1])
-        # regression_labels = tf.reshape(labels[:, :, :, 1:5], [-1, self.cell_size, self.cell_size, 1, 4])
-        # regression_labels =tf.div(tf.tile(regression_labels, [1, 1, 1, self.boxes_per_cell, 1]), tf.to_float(image_shape[0]))
-        # classification_labels = labels[:, :, :, 5:]
-        # 
-        # offset = np.transpose(np.reshape(np.array(
-        #     [np.arange(self.cell_size)] * self.cell_size * self.boxes_per_cell),
-        #     (self.boxes_per_cell, self.cell_size, self.cell_size)), (1, 2, 0))
-        # offset = tf.constant(offset, dtype=tf.float32)
-        # offset = tf.reshape(offset, [1, self.cell_size, self.cell_size, self.boxes_per_cell])
-        # 
-        # regression = tf.stack([(predict_boxes[:, :, :, :, 0] + offset) / self.cell_size,
-        #                                (predict_boxes[:, :, :, :, 1] + tf.transpose(offset, (0, 2, 1, 3))) / self.cell_size,
-        #                                tf.square(predict_boxes[:, :, :, :, 2]),
-        #                                tf.square(predict_boxes[:, :, :, :, 3])])
-        # regression = tf.transpose(regression, [1, 2, 3, 4, 0])
-        # 
-        # iou_predict_truth = self.calc_iou(regression, regression_labels)
-        # 
-        # # calculate I tensor [BATCH_SIZE, CELL_SIZE, CELL_SIZE, BOXES_PER_CELL]
-        # object_mask = tf.reduce_max(iou_predict_truth, 3, keep_dims=True)
-        # object_mask = tf.cast((iou_predict_truth >= object_mask), tf.float32) * response
-        # 
-        # regression_target = tf.stack([regression_labels[:, :, :, :, 0] * self.cell_size - offset,
-        #                        regression_labels[:, :, :, :, 1] * self.cell_size - tf.transpose(offset, (0, 2, 1, 3)),
-        #                        tf.sqrt(regression_labels[:, :, :, :, 2]),
-        #                        tf.sqrt(regression_labels[:, :, :, :, 3])])
-        # regression_target = tf.transpose(regression_target, [1, 2, 3, 4, 0])
-        # 
-        # # regression loss (localization loss) coord_loss
-        # coord_loss = self.regression_loss(regression_target, predict_boxes, object_mask)
-        # 
-        # # confidence loss
-        # object_loss, noobject_loss = self.confidence_loss(predict_scales, iou_predict_truth, object_mask)
-        # 
-        # # classification loss
-        # cls_loss = self.classification_loss(classification_labels, predict_classes, response)
-        # 
-        # self.add_loss(cls_loss)
-        # self.add_loss(object_loss)
-        # self.add_loss(noobject_loss)
-        # self.add_loss(coord_loss)
-        # 
-        # return [coord_loss, object_loss, noobject_loss, cls_loss]
 
     def calc_iou(self, boxes1, boxes2, scope='iou'):
         """calculate ious

@@ -53,13 +53,16 @@ def set_gpu(args):
     ktf.set_session(sess)
 
 
-def create_model(num_classes=20):
+def create_model(generator):
+
+    num_classes = generator.num_classes()
+    batch_size = generator.get_batch_size()
+    anchors = generator.get_anchors()
+
     image = keras.layers.Input((416, 416, 3))
-    # image = keras.layers.Input((None, None, 3))
-    # gt_boxes = keras.layers.Input((7, 7, 25))
     gt_boxes = keras.layers.Input((1, 1, 1, 100, 4))
     targets = keras.layers.Input((13, 13, 5, 4+1+num_classes))
-    train_model = create_yolo2([image, gt_boxes,  targets], training=True, num_classes=num_classes, weights=None)
+    train_model = create_yolo2([image, gt_boxes,  targets], training=True, batch_size=batch_size, anchors=anchors, num_classes=num_classes, weights=None)
     eval_model  = create_yolo2(keras.layers.Input((None, None, 3)), training=False, num_classes=num_classes, weights=None)
 
     return train_model, eval_model
@@ -203,14 +206,14 @@ def main():
 
     # create the model
     print('Creating model, this may take a second...')
-    model, eval_model = create_model(num_classes=train_generator.num_classes())
+    model, eval_model = create_model(generator=train_generator)
 
     # compile model (note: set loss to None since loss is added inside layer)
     model.compile(loss=None, optimizer=keras.optimizers.adam(lr=1e-5))
     eval_model.compile(loss=None, optimizer=keras.optimizers.adam(lr=1e-5))
 
     # print model summary
-    print(model.summary(line_length=180))
+    # print(model.summary(line_length=180))
 
     if os.path.exists(args.weight_path):
         model.load_weights(filepath=args.weight_path, by_name=True)

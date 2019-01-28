@@ -28,7 +28,7 @@ import warnings
 
 import keras
 
-from core.legacy.utils import bbox_iou
+from core.preprocessing.utils import bbox_iou
 from core.preprocessing.utils import BoundBox
 from core.utils.image import (
     resize_image,
@@ -71,6 +71,9 @@ class Generator(object):
 
     def get_anchors(self):
         return self.anchors
+
+    def get_batch_size(self):
+        return self.batch_size
 
     def size(self):
         raise NotImplementedError('size method not implemented')

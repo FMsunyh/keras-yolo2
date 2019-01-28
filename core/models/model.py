@@ -25,9 +25,9 @@ limitations under the License.
 import keras
 from core.models import Yolo2
 
-def create_yolo2(inputs, num_classes=20, training=True, weights=None, *args, **kwargs):
+def create_yolo2(inputs, num_classes=20, batch_size=4, anchors=None, training=True, weights=None, *args, **kwargs):
     image = inputs
-    output = Yolo2(num_classes=num_classes, training=training)(image)
+    output = Yolo2(num_classes=num_classes, batch_size=batch_size,anchors=anchors, training=training)(image)
     model = keras.models.Model(inputs=inputs, outputs=output, *args, **kwargs)
 
     if weights is not None:
