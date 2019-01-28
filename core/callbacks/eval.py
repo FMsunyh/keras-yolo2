@@ -54,7 +54,8 @@ class Evaluate(keras.callbacks.Callback):
 
         # load the best weight.
         print('Loading weight, this may take a second...')
-        self.model.load_weights(self.weight, by_name=True)
+        # self.model.load_weights(self.weight, by_name=True)
+        self.model.load_weights(self.weight)
         # run evaluation
         print('Strat to evaluate,this may take a long time...')
         average_precisions = evaluate(

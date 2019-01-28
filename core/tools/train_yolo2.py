@@ -106,8 +106,7 @@ def create_callbacks(model, evaluation_model, validation_generator, args):
 
     # evaluation
     if args.evaluation and validation_generator:
-        evaluation = Evaluate(weight_path, validation_generator, save_path=args.save_path,
-                              tensorboard=tensorboard_callback)
+        evaluation = Evaluate(weight_path, validation_generator, save_path=args.save_path, tensorboard=tensorboard_callback)
         evaluation = RedirectModel(evaluation, evaluation_model)
         callbacks.append(evaluation)
 
