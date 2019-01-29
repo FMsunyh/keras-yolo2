@@ -152,7 +152,7 @@ def create_generators(args):
     valid_generator = PascalVocGenerator(
         args,
         'test',
-        batch_size=args.batch_size,
+        batch_size=1,
         transform_generator=valid_image_data_generator
     )
 

@@ -40,6 +40,7 @@ class Loss(keras.layers.Layer):
         self.anchors = anchors
         self.object_scale = 5.0
         self.noobject_scale = 1.0
+        # self.noobject_scale = 0.5
         self.class_scale = 1.0
         self.reg_scale = 1.0
 
@@ -79,41 +80,44 @@ class Loss(keras.layers.Layer):
         loss_wh    = tf.reduce_sum(loss_wh) / tf.maximum(1.0, num_reg * 2.0)
 
         reg_loss = loss_xy + loss_wh
+
+        if Debug:
+            reg_loss = tf.Print(reg_loss, [reg_loss], 'reg_loss', summarize=100)
+
         return reg_loss
 
     def confidence_loss(self, y_pred,  y_true, gt_boxes, detectors_mask):
 
         pred_box_xy, pred_box_wh, pred_box_conf = y_pred
 
-        # true_box_xy = y_true[..., 0:2]  # relative position to the containing cell
-        #
-        # ### adjust w and h
-        # true_box_wh = y_true[..., 2:4]  # number of cells accross, horizontally and vertically
-        #
-        # ### adjust confidence
-        # true_wh_half = true_box_wh / 2.
-        # true_mins = true_box_xy - true_wh_half
-        # true_maxes = true_box_xy + true_wh_half
-        #
-        # pred_wh_half = pred_box_wh / 2.
-        # pred_mins = pred_box_xy - pred_wh_half
-        # pred_maxes = pred_box_xy + pred_wh_half
-        #
-        # intersect_mins = tf.maximum(pred_mins, true_mins)
-        # intersect_maxes = tf.minimum(pred_maxes, true_maxes)
-        # intersect_wh = tf.maximum(intersect_maxes - intersect_mins, 0.)
-        # intersect_areas = intersect_wh[..., 0] * intersect_wh[..., 1]
-        #
-        # true_areas = true_box_wh[..., 0] * true_box_wh[..., 1]
-        # pred_areas = pred_box_wh[..., 0] * pred_box_wh[..., 1]
-        #
-        # union_areas = pred_areas + true_areas - intersect_areas
-        # iou_scores = tf.truediv(intersect_areas, union_areas)
-        #
+        true_box_xy = y_true[..., 0:2]  # relative position to the containing cell
+
+        ### adjust w and h
+        true_box_wh = y_true[..., 2:4]  # number of cells accross, horizontally and vertically
+        
+        ### adjust confidence
+        true_wh_half = true_box_wh / 2.
+        true_mins = true_box_xy - true_wh_half
+        true_maxes = true_box_xy + true_wh_half
+
+        pred_wh_half = pred_box_wh / 2.
+        pred_mins = pred_box_xy - pred_wh_half
+        pred_maxes = pred_box_xy + pred_wh_half
+
+        intersect_mins = tf.maximum(pred_mins, true_mins)
+        intersect_maxes = tf.minimum(pred_maxes, true_maxes)
+        intersect_wh = tf.maximum(intersect_maxes - intersect_mins, 0.)
+        intersect_areas = intersect_wh[..., 0] * intersect_wh[..., 1]
+
+        true_areas = true_box_wh[..., 0] * true_box_wh[..., 1]
+        pred_areas = pred_box_wh[..., 0] * pred_box_wh[..., 1]
+
+        union_areas = pred_areas + true_areas - intersect_areas
+        iou_scores = tf.truediv(intersect_areas, union_areas)
+
         # iou_scores = tf.Print(iou_scores, [tf.where(iou_scores)], '\niou_scores', summarize=10000)
         # detectors_mask = tf.Print(detectors_mask, [tf.where(detectors_mask)], 'detectors_mask', summarize=10000)
-        # true_box_conf = iou_scores
-
+        true_box_conf = iou_scores
         # pred_box_conf = tf.sigmoid(y_pred[..., 4])
 
         true_xy = gt_boxes[..., 0:2]
@@ -141,8 +145,10 @@ class Loss(keras.layers.Layer):
         union_areas = pred_areas + true_areas - intersect_areas
         iou_scores = tf.truediv(intersect_areas, union_areas)
 
+
         best_ious = tf.reduce_max(iou_scores, axis=4)
         best_ious = tf.expand_dims(best_ious, axis=-1)
+
         # # detectors_mask = y_true[..., 4]
         # # no_object_conf_mask = (1 - detectors_mask) *  tf.to_float(best_ious < 0.6)
         # object_conf_mask = detectors_mask * tf.to_float(tf.equal(iou_scores, best_ious))
@@ -155,27 +161,30 @@ class Loss(keras.layers.Layer):
         # # true_box_conf = tf.Print(true_box_conf, [tf.shape(true_box_conf)], 'true_box_conf', summarize=10000)
         # # pred_box_conf = tf.Print(pred_box_conf, [tf.shape(pred_box_conf)], 'pred_box_conf', summarize=10000)
 
-        # detectors_mask = y_true[..., 4]
         object_detections = tf.to_float(best_ious > 0.6)
 
         no_object_conf_mask = (1 - detectors_mask) * (1 - object_detections)
         object_conf_mask = detectors_mask
 
-        # true_box_conf = tf.expand_dims(true_box_conf, axis=-1)
+        true_box_conf = tf.expand_dims(true_box_conf, axis=-1)
         pred_box_conf = tf.expand_dims(pred_box_conf, axis=-1)
 
         # true_box_conf = tf.Print(true_box_conf, [tf.shape(true_box_conf)], 'true_box_conf', summarize=10000)
         # pred_box_conf = tf.Print(pred_box_conf, [tf.shape(pred_box_conf)], 'pred_box_conf', summarize=10000)
 
-        object_loss = self.object_scale * object_conf_mask  * tf.square(1 - pred_box_conf)
-        # object_loss = self.object_scale * object_conf_mask  * tf.square(true_box_conf - pred_box_conf)
+        # object_loss = self.object_scale * object_conf_mask  * tf.square(1 - pred_box_conf)
+        object_loss = self.object_scale * object_conf_mask  * tf.square(true_box_conf - pred_box_conf)
         noobject_loss =  self.noobject_scale * no_object_conf_mask  * tf.square(-pred_box_conf)
 
         conf_loss = object_loss + noobject_loss
 
-        num_conf = tf.reduce_sum(detectors_mask)
+        num_conf = tf.reduce_sum(tf.to_float((no_object_conf_mask + object_conf_mask)  > 0.0))
 
+        # num_conf = tf.Print(num_conf, [num_conf], 'num_conf',summarize=100)
         conf_loss  = tf.reduce_sum(conf_loss) / tf.maximum(1.0, num_conf * 2.0)
+
+        if Debug:
+            conf_loss = tf.Print(conf_loss, [conf_loss], 'conf_loss',summarize=100)
 
         return conf_loss
 
@@ -184,6 +193,8 @@ class Loss(keras.layers.Layer):
         cell_y = tf.transpose(cell_x, (0, 2, 1, 3, 4))
 
         cell_grid = tf.tile(tf.concat([cell_x, cell_y], -1), [self.batch_size, 1, 1, self.boxes_per_cell, 1])
+
+        print(self.batch_size)
 
         pred_box_xy = tf.sigmoid(y_pred[..., :2]) + cell_grid
 
@@ -205,10 +216,10 @@ class Loss(keras.layers.Layer):
 
         y_pred, gt_boxes, y_true = inputs
 
-        if Debug:
-            y_pred = tf.Print(y_pred, [tf.shape(y_pred)], '\ny_pred shape:', summarize=100)
-            gt_boxes = tf.Print(gt_boxes, [tf.shape(gt_boxes)], 'gt_boxes shape:', summarize=100)
-            y_true = tf.Print(y_true, [tf.shape(y_true)], 'y_pred shape:', summarize=100)
+        # if Debug:
+        #     y_pred = tf.Print(y_pred, [tf.shape(y_pred)], '\ny_pred shape:', summarize=100)
+        #     gt_boxes = tf.Print(gt_boxes, [tf.shape(gt_boxes)], 'gt_boxes shape:', summarize=100)
+        #     y_true = tf.Print(y_true, [tf.shape(y_true)], 'y_pred shape:', summarize=100)
 
         detectors_mask =tf.expand_dims(y_true[..., 4], -1)
 

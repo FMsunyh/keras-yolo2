@@ -77,7 +77,7 @@ def _softmax(x, axis=-1, t=-100.):
 
     return e_x / e_x.sum(axis, keepdims=True)
 
-def decode_netout(netout, anchors, num_classes=20, obj_threshold=0.1, nms_threshold=0.3):
+def decode_netout(netout, anchors, num_classes=20, obj_threshold=0.3, nms_threshold=0.3):
     grid_h, grid_w, nb_box = netout.shape[:3]
 
     boxes = []
