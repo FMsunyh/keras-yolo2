@@ -128,15 +128,30 @@ def create_callbacks(model, evaluation_model, validation_generator, args):
 
 def create_generators(args):
     # create image data generator objects
-    train_image_data_generator = keras.preprocessing.image.ImageDataGenerator(
+    # train_image_data_generator = keras.preprocessing.image.ImageDataGenerator(
+    #     rescale=1.0 / 255.0,
+    #     horizontal_flip=True,
+    #     vertical_flip=True,
+    #     width_shift_range=0.1,
+    #     height_shift_range=0.1,
+    #     zoom_range=0.1,
+    # )
+    # valid_image_data_generator = keras.preprocessing.image.ImageDataGenerator(
+    #     rescale=1.0 / 255.0,
+    # )
+
+    train_image_data_generator = dict(
         rescale=1.0 / 255.0,
         horizontal_flip=True,
         vertical_flip=True,
-        width_shift_range=0.1,
-        height_shift_range=0.1,
-        zoom_range=0.1,
+        # rotate=False,
+        # random_crop=0.1,
+        # brightness=1,
+        # shift_range=0.1,
+        # zoom_range=0,
     )
-    valid_image_data_generator = keras.preprocessing.image.ImageDataGenerator(
+    # valid_image_data_generator = keras.preprocessing.image.ImageDataGenerator(
+    valid_image_data_generator = dict(
         rescale=1.0 / 255.0,
     )
 

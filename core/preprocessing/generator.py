@@ -33,6 +33,7 @@ from core.preprocessing.utils import BoundBox
 from core.utils.image import (
     resize_image,
     preprocess_image)
+from core.utils.image_transform import imageTransfor
 
 
 class Generator(object):
@@ -131,7 +132,7 @@ class Generator(object):
     def random_transform_group_entry(self, image, annotations):
         # randomly transform both image and annotations
         if self.transform_generator:
-            pass
+            image, annotations = imageTransfor(self.transform_generator)([image, annotations])
 
         return image, annotations
 

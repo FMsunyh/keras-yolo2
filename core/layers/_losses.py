@@ -115,7 +115,7 @@ class Loss(keras.layers.Layer):
         union_areas = pred_areas + true_areas - intersect_areas
         iou_scores = tf.truediv(intersect_areas, union_areas)
 
-        # iou_scores = tf.Print(iou_scores, [tf.where(iou_scores)], '\niou_scores', summarize=10000)
+        # iou_scores = tf.Print(iou_scores, [iou_scores], 'iou_scores', summarize=10000)
         # detectors_mask = tf.Print(detectors_mask, [tf.where(detectors_mask)], 'detectors_mask', summarize=10000)
         true_box_conf = iou_scores
         # pred_box_conf = tf.sigmoid(y_pred[..., 4])
@@ -172,8 +172,8 @@ class Loss(keras.layers.Layer):
         # true_box_conf = tf.Print(true_box_conf, [tf.shape(true_box_conf)], 'true_box_conf', summarize=10000)
         # pred_box_conf = tf.Print(pred_box_conf, [tf.shape(pred_box_conf)], 'pred_box_conf', summarize=10000)
 
-        # object_loss = self.object_scale * object_conf_mask  * tf.square(1 - pred_box_conf)
-        object_loss = self.object_scale * object_conf_mask  * tf.square(true_box_conf - pred_box_conf)
+        object_loss = self.object_scale * object_conf_mask  * tf.square(1 - pred_box_conf)
+        # object_loss = self.object_scale * object_conf_mask  * tf.square(true_box_conf - pred_box_conf)
         noobject_loss =  self.noobject_scale * no_object_conf_mask  * tf.square(-pred_box_conf)
 
         conf_loss = object_loss + noobject_loss
