@@ -42,7 +42,7 @@ class Loss(keras.layers.Layer):
         self.noobject_scale = 1.0
         # self.noobject_scale = 0.5
         self.class_scale = 1.0
-        self.reg_scale = 1.0
+        self.reg_scale = 5.0
 
         super(Loss, self).__init__(*args, **kwargs)
 
@@ -161,10 +161,15 @@ class Loss(keras.layers.Layer):
         # # true_box_conf = tf.Print(true_box_conf, [tf.shape(true_box_conf)], 'true_box_conf', summarize=10000)
         # # pred_box_conf = tf.Print(pred_box_conf, [tf.shape(pred_box_conf)], 'pred_box_conf', summarize=10000)
 
-        object_detections = tf.to_float(best_ious > 0.6)
+        # object_detections = tf.to_float(best_ious > 0.6)
+        #
+        # no_object_conf_mask = (1 - detectors_mask) * (1 - object_detections)
 
-        no_object_conf_mask = (1 - detectors_mask) * (1 - object_detections)
+        no_object_conf_mask = (1 - detectors_mask)
         object_conf_mask = detectors_mask
+
+        # no_object_conf_mask = tf.Print(no_object_conf_mask, [tf.shape(no_object_conf_mask)], 'no_object_conf_mask', summarize=10000)
+        # object_conf_mask = tf.Print(object_conf_mask, [tf.shape(object_conf_mask)], 'object_conf_mask', summarize=10000)
 
         true_box_conf = tf.expand_dims(true_box_conf, axis=-1)
         pred_box_conf = tf.expand_dims(pred_box_conf, axis=-1)
@@ -172,9 +177,12 @@ class Loss(keras.layers.Layer):
         # true_box_conf = tf.Print(true_box_conf, [tf.shape(true_box_conf)], 'true_box_conf', summarize=10000)
         # pred_box_conf = tf.Print(pred_box_conf, [tf.shape(pred_box_conf)], 'pred_box_conf', summarize=10000)
 
-        object_loss = self.object_scale * object_conf_mask  * tf.square(1 - pred_box_conf)
-        # object_loss = self.object_scale * object_conf_mask  * tf.square(true_box_conf - pred_box_conf)
+        # object_loss = self.object_scale * object_conf_mask  * tf.square(1 - pred_box_conf)
+        object_loss = self.object_scale * object_conf_mask  * tf.square(true_box_conf - pred_box_conf)
         noobject_loss =  self.noobject_scale * no_object_conf_mask  * tf.square(-pred_box_conf)
+
+        # no_object_conf_mask = tf.Print(no_object_conf_mask, [tf.where(no_object_conf_mask)], 'no_object_conf_mask', summarize=10000)
+        # noobject_loss = tf.Print(noobject_loss, [tf.where(noobject_loss)], 'noobject_loss', summarize=10000)
 
         conf_loss = object_loss + noobject_loss
 
